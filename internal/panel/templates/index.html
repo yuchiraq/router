@@ -1,0 +1,146 @@
+{{ define "content" }}
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <h5 class="mb-0 me-3"><i class="bi bi-globe2 me-2"></i>Маршруты</h5>
+          <div id="spinner" class="spinner-border spinner-border-sm text-light spinner" role="status"></div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-dark align-middle" id="routes-table">
+            <thead>
+              <tr>
+                <th>Домен</th>
+                <th>Назначение</th>
+                <th>Статус</th>
+                <th class="text-end">Действия</th>
+              </tr>
+            </thead>
+            <tbody><!-- rows by JS --></tbody>
+          </table>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button id="refresh-btn" class="btn btn-outline-light">
+            <i class="bi bi-arrow-clockwise me-1"></i>Обновить
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="mb-3"><i class="bi bi-node-plus me-2"></i>Добавить маршрут</h5>
+        <form id="add-form" class="needs-validation" novalidate>
+          <div class="mb-3">
+            <label class="form-label">Домен</label>
+            <input type="text" class="form-control" name="domain" placeholder="avayusstroi.by" required>
+            <div class="invalid-feedback">Укажи домен.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Целевой адрес</label>
+            <input type="text" class="form-control" name="target" placeholder="http://localhost:8080" required>
+            <div class="invalid-feedback">Укажи URL назначения.</div>
+          </div>
+          <button class="btn btn-accent w-100" type="submit">
+            <i class="bi bi-check2-circle me-1"></i>Добавить
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
+      <div class="card-body">
+        <h6 class="text-secondary mb-2">Подсказки</h6>
+        <ul class="small text-secondary mb-0">
+          <li>HTTP/HTTPS идут через этот прокси; целевые сервисы слушают свои локальные порты.</li>
+          <li>Статус можно переключать не удаляя маршрут.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const spinner = document.getElementById('spinner');
+  const tableBody = document.querySelector('#routes-table tbody');
+
+  function setLoading(on){ spinner.style.display = on ? 'inline-block' : 'none'; }
+
+  async function fetchJSON(url, opts) {
+    setLoading(true);
+    try {
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error(await res.text());
+      return await res.json();
+    } finally { setLoading(false); }
+  }
+
+  function renderRows(data) {
+    tableBody.innerHTML = '';
+    const entries = Object.entries(data).sort((a,b)=>a[0].localeCompare(b[0]));
+    for (const [domain, route] of entries) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="fw-medium">${domain}</td>
+        <td><code class="text-light">${route.Target}</code></td>
+        <td>
+          ${route.Active
+            ? '<span class="badge rounded-pill badge-on">Включен</span>'
+            : '<span class="badge rounded-pill badge-off">Выключен</span>'}
+        </td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-light me-2" data-action="toggle" data-domain="${domain}">
+            <i class="bi bi-power"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-danger" data-action="delete" data-domain="${domain}">
+            <i class="bi bi-trash"></i>
+          </button>
+        </td>`;
+      tableBody.appendChild(tr);
+    }
+  }
+
+  async function loadRoutes() {
+    const data = await fetchJSON('/api/routes');
+    renderRows(data);
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', loadRoutes);
+
+  tableBody.addEventListener('click', async (e)=>{
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const domain = btn.getAttribute('data-domain');
+    const action = btn.getAttribute('data-action');
+    if (action === 'toggle') {
+      await fetchJSON(`/api/toggle?domain=${encodeURIComponent(domain)}`, { method: 'POST' });
+      await loadRoutes();
+    } else if (action === 'delete') {
+      if (confirm(`Удалить маршрут для ${domain}?`)) {
+        await fetchJSON(`/api/delete?domain=${encodeURIComponent(domain)}`, { method: 'POST' });
+        await loadRoutes();
+      }
+    }
+  });
+
+  // add form
+  const addForm = document.getElementById('add-form');
+  addForm.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    if (!addForm.checkValidity()){ addForm.classList.add('was-validated'); return; }
+    const formData = new FormData(addForm);
+    await fetchJSON('/api/add', { method:'POST', body: formData });
+    addForm.reset();
+    addForm.classList.remove('was-validated');
+    await loadRoutes();
+  });
+
+  // initial
+  loadRoutes();
+</script>
+{{ end }}

@@ -1,4 +1,4 @@
-module mymodule
+module router
 
 go 1.20
 
