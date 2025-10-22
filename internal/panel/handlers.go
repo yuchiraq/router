@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"embed"
 	"html/template"
 	"log"
 	"net/http"
@@ -8,19 +9,19 @@ import (
 	"router/internal/storage"
 )
 
+//go:embed templates/*.html
+var templatesFS embed.FS
+
 func StartPanel(addr string, cfg *config.Config, store *storage.RuleStore) error {
 	mux := http.NewServeMux()
 
-	tmpl, err := template.ParseFiles(
-		"internal/panel/templates/layout.html",
-		"internal/panel/templates/index.html",
-	)
+	tmpl, err := template.ParseFS(templatesFS, "templates/layout.html", "templates/index.html")
 	if err != nil {
 		return err
 	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if err := tmpl.ExecuteTemplate(w, "layout", struct{ Rules map[string]string }{Rules: store.All()}); err != nil {
+		if err := tmpl.ExecuteTemplate(w, "layout.html", struct{ Rules map[string]string }{Rules: store.All()}); err != nil {
 			log.Printf("Error executing template: %v", err)
 		}
 	})
