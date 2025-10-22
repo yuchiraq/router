@@ -28,7 +28,7 @@ func main() {
 	panelMux.HandleFunc("/", panelHandler.Index)
 	panelMux.HandleFunc("/add", panelHandler.AddRule)
 	panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-	panelMux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("internal/panel/templates/static"))))
+	panelMux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("internal/panel/templates"))))
 
 	// Start servers
 	go func() {
