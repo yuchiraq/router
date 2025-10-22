@@ -39,7 +39,7 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 
 		user, pass, ok := r.BasicAuth()
 		if !ok || user != h.username || pass != h.password {
-			w.Header().Set("WWW-Authenticate", `Basic realm=\"Restricted\"")
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
