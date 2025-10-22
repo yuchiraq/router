@@ -1,7 +1,11 @@
 package storage
 
 import (
+	"encoding/json"
+	"io/ioutil"
+	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -10,9 +14,9 @@ import (
 // Rule represents a routing rule with its status and last access time
 
 type Rule struct {
-	Target      string
-	LastAccess  time.Time
-	ServiceDown bool
+	Target      string    `json:"target"`
+	LastAccess  time.Time `json:"-"`
+	ServiceDown bool      `json:"-"`
 }
 
 // RuleStore manages the routing rules
@@ -20,13 +24,21 @@ type Rule struct {
 type RuleStore struct {
 	mu    sync.RWMutex
 	rules map[string]*Rule
+
+	storage *Storage
 }
 
 // NewRuleStore creates a new RuleStore
 
-func NewRuleStore() *RuleStore {
+func NewRuleStore(storage *Storage) *RuleStore {
+	rules, err := storage.Load()
+	if err != nil {
+		log.Printf("Error loading rules: %v", err)
+	}
+
 	rs := &RuleStore{
-		rules: make(map[string]*Rule),
+		rules:   rules,
+		storage: storage,
 	}
 	go rs.startHealthCheck()
 	return rs
@@ -38,6 +50,7 @@ func (s *RuleStore) Add(host, target string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rules[host] = &Rule{Target: target}
+	s.storage.Save(s.rules)
 }
 
 // Remove removes a rule
@@ -46,6 +59,7 @@ func (s *RuleStore) Remove(host string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.rules, host)
+	s.storage.Save(s.rules)
 }
 
 // Get retrieves a rule
@@ -93,7 +107,7 @@ func (s *RuleStore) checkServices() {
 		targetHost, targetPort, err := net.SplitHostPort(rule.Target)
 		if err != nil {
 			// If the target is not in host:port format, assume it's a domain and default to port 80 or 443
-			if strings.HasSuffix(rule.Target, ":443") {
+			if strings.hasSuffix(rule.Target, ":443") {
 				targetPort = "443"
 			} else {
 				targetPort = "80"
@@ -109,4 +123,52 @@ func (s *RuleStore) checkServices() {
 			conn.Close()
 		}
 	}
+}
+
+// Storage handles saving and loading routing rules to a file.
+type Storage struct {
+	filePath string
+	mu       sync.Mutex
+}
+
+// NewStorage creates a new Storage instance.
+func NewStorage(filePath string) *Storage {
+	return &Storage{
+		filePath: filePath,
+	}
+}
+
+// Save writes the rules to the specified file.
+func (s *Storage) Save(rules map[string]*Rule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := json.MarshalIndent(rules, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(s.filePath, data, 0644)
+}
+
+// Load reads the rules from the specified file.
+func (s *Storage) Load() (map[string]*Rule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, err := os.Stat(s.filePath); os.IsNotExist(err) {
+		return make(map[string]*Rule), nil // Return empty map if file doesn't exist
+	}
+
+	data, err := ioutil.ReadFile(s.filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var rules map[string]*Rule
+	if err := json.Unmarshal(data, &rules); err != nil {
+		return nil, err
+	}
+
+	return rules, nil
 }

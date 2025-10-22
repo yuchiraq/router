@@ -12,9 +12,8 @@ func main() {
 	cfg := config.Load()
 
 	// Хранилище правил
-	rules := storage.NewRuleStore()
-	rules.Add("avayusstroi.by", "localhost:8080")
-	rules.Add("avayusstroi.xyz", "localhost:8090")
+	storage := storage.NewStorage("storage.json")
+	rules := storage.NewRuleStore(storage)
 
 	// Запускаем панель управления
 	go func() {
