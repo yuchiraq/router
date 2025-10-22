@@ -1,69 +1,77 @@
 package proxy
 
 import (
-	"context"
-	"crypto/tls"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"router/internal/storage"
-	"strings"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
-func StartProxy(rules *storage.RuleStore) {
-	certManager := autocert.Manager{
-		Prompt: autocert.AcceptTOS,
-		Cache:  autocert.DirCache("certs"),
-		HostPolicy: func(ctx context.Context, host string) error {
-			if !rules.Exists(host) {
-				return context.DeadlineExceeded // Используем DeadlineExceeded, как рекомендуется в документации
-			}
-			return nil
-		},
-	}
-
-	// HTTP -> HTTPS redirect
+func StartProxy(store *storage.RuleStore) {
+	// HTTP to HTTPS redirection
 	go func() {
-		log.Println("HTTP to HTTPS redirect server running on :80")
-		if err := http.ListenAndServe(":80", certManager.HTTPHandler(nil)); err != nil {
-			log.Printf("HTTP redirect server error: %v", err)
+		if err := http.ListenAndServe(":80", http.HandlerFunc(redirectToHTTPS)); err != nil {
+			log.Fatalf("ListenAndServe error: %v", err)
 		}
 	}()
 
-	server := &http.Server{
-		Addr: ":443",
-		TLSConfig: &tls.Config{
-			GetCertificate: certManager.GetCertificate,
-			MinVersion:     tls.VersionTLS12,
-		},
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			target, ok := rules.GetTarget(r.Host)
+	// HTTPS proxy
+	m := &autocert.Manager{
+		Prompt: autocert.AcceptTOS,
+		HostPolicy: func(host string) error {
+			// Allow any host that has a rule
+			_, ok := store.Get(host)
 			if !ok {
-				http.Error(w, "Domain not found", http.StatusNotFound)
-				return
+				return log.Output(2, "host not allowed: "+host)
 			}
+			return nil
+		},
+		Cache: autocert.DirCache("certs"),
+	}
 
-			if !strings.HasPrefix(target, "http") {
-				target = "http://" + target
-			}
-
-			targetURL, err := url.Parse(target)
-			if err != nil {
-				log.Printf("Error parsing target URL for host %s: %v", r.Host, err)
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-				return
-			}
-
-			proxy := httputil.NewSingleHostReverseProxy(targetURL)
-			proxy.ServeHTTP(w, r)
-		}),
+	s := &http.Server{
+		Addr:      ":443",
+		TLSConfig: m.TLSConfig(),
+		Handler:   http.HandlerFunc(proxyHandler(store)),
 	}
 
 	log.Println("HTTPS proxy server running on :443 with autocert")
-	if err := server.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("HTTPS proxy server error: %v", err)
+	log.Fatal(s.ListenAndServeTLS("", ""))
+}
+
+func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "https://"+r.Host+r.URL.String(), http.StatusMovedPermanently)
+}
+
+func proxyHandler(store *storage.RuleStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target, ok := store.Get(r.Host)
+		if !ok {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+
+		// Create a new URL for the target
+		url, err := url.Parse("http://" + target)
+		if err != nil {
+			log.Printf("Error parsing target URL: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		// Create a reverse proxy
+		proxy := httputil.NewSingleHostReverseProxy(url)
+
+		// Update the headers to allow for SSL redirection
+		r.URL.Host = url.Host
+		r.URL.Scheme = url.Scheme
+		r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
+		r.Host = url.Host
+
+		// Serve the request
+		proxy.ServeHTTP(w, r)
 	}
 }

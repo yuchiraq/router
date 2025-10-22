@@ -1,0 +1,150 @@
+/* styles.css */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+.container {
+    width: 100%;
+    max-width: 800px;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #333;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 20px;
+    background-color: rgba(0, 0, 0, 0.03);
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.rule-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.rule-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.rule-item:last-child {
+    border-bottom: none;
+}
+
+.rule-info .domain {
+    font-weight: 500;
+    font-size: 1.1em;
+    color: #333;
+}
+
+.rule-info .target {
+    font-size: 0.9em;
+    color: #666;
+}
+
+.rule-status {
+    display: flex;
+    align-items: center;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+
+.status-online {
+    background-color: #28a745;
+    box-shadow: 0 0 8px #28a745;
+}
+
+.status-offline {
+    background-color: #dc3545;
+    box-shadow: 0 0 8px #dc3545;
+}
+
+.last-access {
+    font-size: 0.8em;
+    color: #888;
+    text-align: right;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+input[type="text"] {
+    width: calc(100% - 22px);
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    transition: border-color 0.2s;
+}
+
+input[type="text"]:focus {
+    border-color: #007aff;
+    outline: none;
+}
+
+.btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background-color: #007aff;
+    color: white;
+    font-size: 1em;
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.2s;
+    text-decoration: none;
+}
+
+.btn:hover {
+    background-color: #0056b3;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.actions form {
+    display: inline-block;
+    margin-left: 10px;
+}

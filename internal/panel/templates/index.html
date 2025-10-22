@@ -1,80 +1,55 @@
-{{ define "content" }}
-<div class="container">
-  <h1 class="mb-4 text-center text-white">Управление правилами прокси</h1>
-
-  <div class="row justify-content-center">
-    <div class="col-lg-8">
-      <div class="card shadow-lg border-0 rounded-lg">
-        <div class="card-body p-5">
-          <form action="/add" method="post" id="add-rule-form">
-            <div class="row g-3 align-items-center mb-4">
-              <div class="col-md-5">
-                <div class="input-group">
-                  <span class="input-group-text"><i class="bi bi-globe"></i></span>
-                  <input type="text" class="form-control form-control-lg" name="host" placeholder="example.com" required>
-                </div>
-              </div>
-              <div class="col-md-5">
-                <div class="input-group">
-                  <span class="input-group-text"><i class="bi bi-box-arrow-right"></i></span>
-                  <input type="text" class="form-control form-control-lg" name="target" placeholder="localhost:8080" required>
-                </div>
-              </div>
-              <div class="col-md-2 text-center">
-                <button type="submit" class="btn btn-accent btn-lg w-100">
-                  <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                  <i class="bi bi-plus-lg"></i>
-                </button>
-              </div>
-            </div>
-          </form>
-
-          <hr class="my-4 bg-secondary">
-
-          <div class="table-responsive">
-            <table class="table table-dark table-hover align-middle">
-              <thead>
-                <tr>
-                  <th scope="col">Домен</th>
-                  <th scope="col">Целевой адрес</th>
-                  <th scope="col" class="text-end">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {{ range $host, $target := .Rules }}
-                <tr>
-                  <td><a href="https://{{ $host }}" target="_blank">{{ $host }}</a></td>
-                  <td>{{ $target }}</td>
-                  <td class="text-end">
-                    <form action="/remove" method="post" class="d-inline-block">
-                      <input type="hidden" name="host" value="{{ $host }}">
-                      <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
-                    </form>
-                  </td>
-                </tr>
-                {{ else }}
-                <tr>
-                  <td colspan="3" class="text-center text-secondary py-4">Правила еще не добавлены.</td>
-                </tr>
-                {{ end }}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+{{define "content"}}
+<div class="header">
+    <h1>Control Panel</h1>
 </div>
 
-<script>
-document.getElementById('add-rule-form').addEventListener('submit', function() {
-  const button = this.querySelector('button[type="submit"]');
-  const spinner = button.querySelector('.spinner-border');
-  const icon = button.querySelector('.bi-plus-lg');
+<div class="card">
+    <div class="card-header">Manage Rules</div>
+    <div class="card-body">
+        <div class="card-body">
+            <form action="/add" method="post" class="form-inline">
+                <div class="form-group">
+                    <input type="text" name="host" placeholder="Domain (e.g., example.com)" required class="form-control">
+                </div>
+                <div class="form-group">
+                    <input type="text" name="target" placeholder="Target (e.g., localhost:8080)" required class="form-control">
+                </div>
+                <button type="submit" class="btn">Add Rule</button>
+            </form>
+        </div>
+    </div>
+</div>
 
-  spinner.classList.remove('d-none');
-  icon.classList.add('d-none');
-  button.disabled = true;
-});
-</script>
-{{ end }}
+
+<div class="card">
+    <div class="card-header">Current Rules</div>
+    <div class="card-body">
+        <ul class="rule-list">
+            {{range $host, $rule := .Rules}}
+            <li class="rule-item">
+                <div class="rule-info">
+                    <div class="domain">{{$host}}</div>
+                    <div class="target">{{$rule.Target}}</div>
+                </div>
+                <div class="rule-status">
+                    <span class="status-indicator {{if $rule.ServiceDown}}status-offline{{else}}status-online{{end}}"></span>
+                    <div class="last-access">
+                        {{if not $rule.LastAccess.IsZero}}
+                            Last used: {{$rule.LastAccess.Format "2006-01-02 15:04:05"}}
+                        {{else}}
+                            Never used
+                        {{end}}
+                    </div>
+                </div>
+                <div class="actions">
+                    <form action="/remove" method="post">
+                        <input type="hidden" name="host" value="{{$host}}">
+                        <button type="submit" class="btn btn-danger">Remove</button>
+                    </form>
+                </div>
+            </li>
+            {{end}}
+        </ul>
+    </div>
+</div>
+{{end}}

@@ -1,48 +1,112 @@
 package storage
 
-import "sync"
+import (
+	"net"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Rule represents a routing rule with its status and last access time
+
+type Rule struct {
+	Target      string
+	LastAccess  time.Time
+	ServiceDown bool
+}
+
+// RuleStore manages the routing rules
 
 type RuleStore struct {
-	sync.RWMutex
-	rules map[string]string // host -> targetAddr
+	mu    sync.RWMutex
+	rules map[string]*Rule
 }
+
+// NewRuleStore creates a new RuleStore
 
 func NewRuleStore() *RuleStore {
-	return &RuleStore{rules: make(map[string]string)}
+	rs := &RuleStore{
+		rules: make(map[string]*Rule),
+	}
+	go rs.startHealthCheck()
+	return rs
 }
+
+// Add adds a new rule or updates an existing one
 
 func (s *RuleStore) Add(host, target string) {
-	s.Lock()
-	defer s.Unlock()
-	s.rules[host] = target
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rules[host] = &Rule{Target: target}
 }
 
+// Remove removes a rule
+
 func (s *RuleStore) Remove(host string) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.rules, host)
 }
 
-func (s *RuleStore) GetTarget(host string) (string, bool) {
-	s.RLock()
-	defer s.RUnlock()
-	t, ok := s.rules[host]
-	return t, ok
-}
+// Get retrieves a rule
 
-func (s *RuleStore) All() map[string]string {
-	s.RLock()
-	defer s.RUnlock()
-	copy := make(map[string]string)
-	for k, v := range s.rules {
-		copy[k] = v
+func (s *RuleStore) Get(host string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rule, ok := s.rules[host]
+	if ok {
+		rule.LastAccess = time.Now() // Update LastAccess on rule retrieval
+		return rule.Target, true
 	}
-	return copy
+	return "", false
 }
 
-func (s *RuleStore) Exists(host string) bool {
-	s.RLock()
-	defer s.RUnlock()
-	_, ok := s.rules[host]
-	return ok
+// All returns all rules
+
+func (s *RuleStore) All() map[string]*Rule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	// Create a copy to avoid race conditions when the map is read in the template
+	newMap := make(map[string]*Rule, len(s.rules))
+	for k, v := range s.rules {
+		newMap[k] = v
+	}
+	return newMap
+}
+
+// startHealthCheck periodically checks the health of the services
+
+func (s *RuleStore) startHealthCheck() {
+	for {
+		time.Sleep(1 * time.Minute) // Check every minute
+		s.checkServices()
+	}
+}
+
+// checkServices attempts to connect to each service to check its status
+
+func (s *RuleStore) checkServices() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, rule := range s.rules {
+		// Extract host and port from target
+		targetHost, targetPort, err := net.SplitHostPort(rule.Target)
+		if err != nil {
+			// If the target is not in host:port format, assume it's a domain and default to port 80 or 443
+			if strings.HasSuffix(rule.Target, ":443") {
+				targetPort = "443"
+			} else {
+				targetPort = "80"
+			}
+			targetHost = rule.Target
+		}
+
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetHost, targetPort), 5*time.Second)
+		if err != nil {
+			rule.ServiceDown = true
+		} else {
+			rule.ServiceDown = false
+			conn.Close()
+		}
+	}
 }

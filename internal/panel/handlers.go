@@ -9,24 +9,30 @@ import (
 	"router/internal/storage"
 )
 
-//go:embed templates/*.html
+//go:embed templates/*
 var templatesFS embed.FS
 
 func StartPanel(addr string, cfg *config.Config, store *storage.RuleStore) error {
 	mux := http.NewServeMux()
 
-	tmpl, err := template.ParseFS(templatesFS, "templates/layout.html", "templates/index.html")
+	tmpl, err := template.New("").ParseFS(templatesFS, "templates/layout.html", "templates/index.html")
 	if err != nil {
 		return err
 	}
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if err := tmpl.ExecuteTemplate(w, "layout.html", struct{ Rules map[string]string }{Rules: store.All()}); err != nil {
+	// Handler for the main page
+	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := tmpl.ExecuteTemplate(w, "layout.html", struct{ Rules map[string]*storage.Rule }{Rules: store.All()}); err != nil {
 			log.Printf("Error executing template: %v", err)
 		}
 	})
 
-	mux.HandleFunc("/add", func(w http.ResponseWriter, r *http.Request) {
+	// Handler for adding a rule
+	addHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -41,7 +47,8 @@ func StartPanel(addr string, cfg *config.Config, store *storage.RuleStore) error
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 
-	mux.HandleFunc("/remove", func(w http.ResponseWriter, r *http.Request) {
+	// Handler for removing a rule
+	removeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -55,10 +62,18 @@ func StartPanel(addr string, cfg *config.Config, store *storage.RuleStore) error
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 
-	// Добавляем обработчик для статических файлов, если они есть.
-	// fs := http.FileServer(http.Dir("internal/panel/static"))
-	// mux.Handle("/static/", http.StripPrefix("/static/", fs))
+	// Static file server for CSS
+	staticFS, err := http.FS(templatesFS)
+	if err != nil {
+		return err
+	}
+	fs := http.StripPrefix("/static/", http.FileServer(staticFS))
+
+	mux.Handle("/static/", fs)
+	mux.Handle("/add", BasicAuth(addHandler, cfg))
+	mux.Handle("/remove", BasicAuth(removeHandler, cfg))
+	mux.Handle("/", BasicAuth(mainHandler, cfg))
 
 	log.Printf("Control panel is available at http://%s", addr)
-	return http.ListenAndServe(addr, mux) // Пока без аутентификации для упрощения
+	return http.ListenAndServe(addr, mux)
 }
