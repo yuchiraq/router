@@ -11,14 +11,24 @@ import (
 )
 
 func main() {
-	c := config.New()
+	log.Println("Starting application...")
 
+	log.Println("Loading configuration...")
+	c := config.New()
+	log.Println("Configuration loaded.")
+
+	log.Println("Initializing storage...")
 	storageDriver := storage.NewStorage("rules.json")
 	rs := storage.NewRuleStore(storageDriver)
+	log.Println("Storage initialized.")
 
+	log.Println("Creating proxy handler...")
 	proxyHandler := proxy.NewProxy(rs)
+	log.Println("Proxy handler created.")
 
+	log.Println("Creating panel handler...")
 	panelHandler := panel.NewHandler(rs, c.Username, c.Password)
+	log.Println("Panel handler created.")
 
 	// Separate mux for panel and proxy
 	proxyMux := http.NewServeMux()
@@ -45,6 +55,7 @@ func main() {
 		}
 	}()
 
+	log.Println("Application started successfully. Servers are running.")
 	// Keep the main goroutine alive
 	select {}
 }

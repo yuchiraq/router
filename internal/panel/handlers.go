@@ -2,6 +2,7 @@ package panel
 
 import (
 	"html/template"
+	"log"
 	"net/http"
 	"router/internal/storage"
 )
@@ -14,7 +15,13 @@ type Handler struct {
 }
 
 func NewHandler(store *storage.RuleStore, username, password string) *Handler {
-	tmpl := template.Must(template.ParseFiles("internal/panel/templates/layout.html", "internal/panel/templates/index.html"))
+	log.Println("Parsing templates...")
+	tmpl, err := template.ParseFiles("internal/panel/templates/layout.html", "internal/panel/templates/index.html")
+	if err != nil {
+		log.Fatalf("Failed to parse templates: %v", err)
+	}
+	log.Println("Templates parsed successfully.")
+
 	return &Handler{
 		store:    store,
 		username: username,
@@ -32,7 +39,7 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 
 		user, pass, ok := r.BasicAuth()
 		if !ok || user != h.username || pass != h.password {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm=\"Restricted\"")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
