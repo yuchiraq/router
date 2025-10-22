@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"net/http"
+
 	"router/internal/config"
 	"router/internal/panel"
 	"router/internal/proxy"
@@ -9,19 +11,40 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	c := config.New()
 
-	// Хранилище правил
-	storage := storage.NewStorage("storage.json")
-	rules := storage.NewRuleStore(storage)
+	storage := storage.NewStorage("rules.json")
+	rs := storage.NewRuleStore(storage)
 
-	// Запускаем панель управления
+	proxyHandler := proxy.NewProxy(rs)
+
+	panelHandler := panel.NewHandler(rs, c.Username, c.Password)
+
+	// Separate mux for panel and proxy
+	proxyMux := http.NewServeMux()
+	proxyMux.HandleFunc("/", proxyHandler.ServeHTTP)
+
+	panelMux := http.NewServeMux()
+	panelMux.HandleFunc("/", panelHandler.Index)
+	panelMux.HandleFunc("/add", panelHandler.AddRule)
+	panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
+	panelMux.Handle("/styles.css", http.FileServer(http.Dir("internal/panel/templates")))
+
+	// Start servers
 	go func() {
-		if err := panel.StartPanel(":8162", cfg, rules); err != nil {
-			log.Fatalf("Ошибка запуска панели: %v", err)
+		log.Println("Proxy server starting on :8080")
+		if err := http.ListenAndServe(":8080", proxyMux); err != nil {
+			log.Fatal("Proxy server failed to start:", err)
 		}
 	}()
 
-	// Запускаем сам прокси
-	proxy.StartProxy(rules)
+	go func() {
+		log.Println("Panel server starting on :8081")
+		if err := http.ListenAndServe(":8081", panelMux); err != nil {
+			log.Fatal("Panel server failed to start:", err)
+		}
+	}()
+
+	// Keep the main goroutine alive
+	select {}
 }
