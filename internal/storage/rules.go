@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -83,6 +85,16 @@ func (s *RuleStore) All() map[string]*Rule {
 		newMap[k] = v
 	}
 	return newMap
+}
+
+// HostPolicy is used by autocert to determine which domains to request certificates for.
+func (s *RuleStore) HostPolicy(ctx context.Context, host string) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.rules[host]; ok {
+		return nil
+	}
+	return fmt.Errorf("host %q not allowed", host)
 }
 
 // startHealthCheck periodically checks the health of the services

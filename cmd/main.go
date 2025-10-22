@@ -8,6 +8,8 @@ import (
 	"router/internal/panel"
 	"router/internal/proxy"
 	"router/internal/storage"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
@@ -30,6 +32,13 @@ func main() {
 	panelHandler := panel.NewHandler(rs, c.Username, c.Password)
 	log.Println("Panel handler created.")
 
+	// Autocert manager
+	m := &autocert.Manager{
+		Cache:      autocert.DirCache("certs"),
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: rs.HostPolicy,
+	}
+
 	// Separate mux for panel and proxy
 	proxyMux := http.NewServeMux()
 	proxyMux.HandleFunc("/", proxyHandler.ServeHTTP)
@@ -38,17 +47,30 @@ func main() {
 	panelMux.HandleFunc("/", panelHandler.Index)
 	panelMux.HandleFunc("/add", panelHandler.AddRule)
 	panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-    panelMux.HandleFunc("/styles.css", panelHandler.ServeStyles)
+	panelMux.HandleFunc("/styles.css", panelHandler.ServeStyles)
 
-
-	// Start servers
+	// HTTP server for ACME challenges
 	go func() {
-		log.Println("Proxy server starting on 0.0.0.0:80")
-		if err := http.ListenAndServe("0.0.0.0:80", proxyMux); err != nil {
+		log.Println("Starting HTTP server for ACME challenges on :80")
+		if err := http.ListenAndServe(":80", m.HTTPHandler(nil)); err != nil {
+			log.Fatal("HTTP server for ACME challenges failed:", err)
+		}
+	}()
+
+	// HTTPS server for proxy
+	go func() {
+		log.Println("Proxy server starting on 0.0.0.0:443")
+		server := &http.Server{
+			Addr:      ":443",
+			Handler:   proxyMux,
+			TLSConfig: m.TLSConfig(),
+		}
+		if err := server.ListenAndServeTLS("", ""); err != nil {
 			log.Fatal("Proxy server failed to start:", err)
 		}
 	}()
 
+	// Panel server
 	go func() {
 		log.Println("Panel server starting on 0.0.0.0:8162")
 		if err := http.ListenAndServe("0.0.0.0:8162", panelMux); err != nil {
