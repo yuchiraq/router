@@ -49,8 +49,8 @@ func main() {
 	}()
 
 	go func() {
-		log.Println("Panel server starting on 0.0.0.0:8182")
-		if err := http.ListenAndServe("0.0.0.0:8182", panelMux); err != nil {
+		log.Println("Panel server starting on 0.0.0.0:8162")
+		if err := http.ListenAndServe("0.0.0.0:8162", panelMux); err != nil {
 			log.Fatal("Panel server failed to start:", err)
 		}
 	}()
