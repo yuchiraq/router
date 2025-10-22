@@ -3,19 +3,25 @@ package panel
 import (
 	"embed"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"router/internal/config"
 	"router/internal/storage"
 )
 
-//go:embed templates/*
-var templatesFS embed.FS
+//go:embed templates
+var embedFS embed.FS
 
 func StartPanel(addr string, cfg *config.Config, store *storage.RuleStore) error {
 	mux := http.NewServeMux()
 
-	tmpl, err := template.New("").ParseFS(templatesFS, "templates/layout.html", "templates/index.html")
+	templatesFS, err := fs.Sub(embedFS, "templates")
+	if err != nil {
+		return err
+	}
+
+	tmpl, err := template.New("").ParseFS(templatesFS, "layout.html", "index.html")
 	if err != nil {
 		return err
 	}
@@ -63,10 +69,9 @@ func StartPanel(addr string, cfg *config.Config, store *storage.RuleStore) error
 	})
 
 	// Static file server for CSS
-	staticFS := http.FS(templatesFS)
-	fs := http.StripPrefix("/static/", http.FileServer(staticFS))
+	fs := http.FileServer(http.FS(templatesFS))
+	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	mux.Handle("/static/", fs)
 	mux.Handle("/add", BasicAuth(addHandler, cfg))
 	mux.Handle("/remove", BasicAuth(removeHandler, cfg))
 	mux.Handle("/", BasicAuth(mainHandler, cfg))
