@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -21,7 +22,7 @@ func StartProxy(store *storage.RuleStore) {
 	// HTTPS proxy
 	m := &autocert.Manager{
 		Prompt: autocert.AcceptTOS,
-		HostPolicy: func(host string) error {
+		HostPolicy: func(_ context.Context, host string) error {
 			// Allow any host that has a rule
 			_, ok := store.Get(host)
 			if !ok {

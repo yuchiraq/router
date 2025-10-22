@@ -63,10 +63,7 @@ func StartPanel(addr string, cfg *config.Config, store *storage.RuleStore) error
 	})
 
 	// Static file server for CSS
-	staticFS, err := http.FS(templatesFS)
-	if err != nil {
-		return err
-	}
+	staticFS := http.FS(templatesFS)
 	fs := http.StripPrefix("/static/", http.FileServer(staticFS))
 
 	mux.Handle("/static/", fs)
