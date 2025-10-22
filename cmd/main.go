@@ -13,8 +13,8 @@ import (
 func main() {
 	c := config.New()
 
-	storage := storage.NewStorage("rules.json")
-	rs := storage.NewRuleStore(storage)
+	storageDriver := storage.NewStorage("rules.json")
+	rs := storage.NewRuleStore(storageDriver)
 
 	proxyHandler := proxy.NewProxy(rs)
 
