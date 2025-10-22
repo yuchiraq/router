@@ -28,7 +28,7 @@ func main() {
 	panelMux.HandleFunc("/", panelHandler.Index)
 	panelMux.HandleFunc("/add", panelHandler.AddRule)
 	panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-	panelMux.Handle("/styles.css", http.FileServer(http.Dir("internal/panel/templates")))
+	panelMux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("internal/panel/templates/static"))))
 
 	// Start servers
 	go func() {
@@ -39,8 +39,8 @@ func main() {
 	}()
 
 	go func() {
-		log.Println("Panel server starting on :8081")
-		if err := http.ListenAndServe(":8081", panelMux); err != nil {
+		log.Println("Panel server starting on :8182")
+		if err := http.ListenAndServe(":8182", panelMux); err != nil {
 			log.Fatal("Panel server failed to start:", err)
 		}
 	}()
