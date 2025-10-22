@@ -1,37 +1,17 @@
 package config
 
-import (
-	"log"
-	"os"
+import "os"
 
-	"github.com/joho/godotenv"
-)
-
-// Config structure for application configuration
-
+// Config holds the application configuration
 type Config struct {
-	AdminUser string
-	AdminPass string
+	Username string
+	Password string
 }
 
-// Load loads configuration from .env file
-
-func Load() *Config {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-	}
-
+// New creates a new Config from environment variables
+func New() *Config {
 	return &Config{
-		AdminUser: getEnv("ADMIN_USER", "admin"),
-		AdminPass: getEnv("ADMIN_PASS", "password"),
+		Username: os.Getenv("ROUTER_USERNAME"),
+		Password: os.Getenv("ROUTER_PASSWORD"),
 	}
-}
-
-// Helper to get an environment variable or return a default value
-
-func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
 }
