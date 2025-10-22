@@ -38,12 +38,13 @@ func main() {
 	panelMux.HandleFunc("/", panelHandler.Index)
 	panelMux.HandleFunc("/add", panelHandler.AddRule)
 	panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-	panelMux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("internal/panel/templates"))))
+    panelMux.HandleFunc("/styles.css", panelHandler.ServeStyles)
+
 
 	// Start servers
 	go func() {
 		log.Println("Proxy server starting on 0.0.0.0:8080")
-		if err := http.ListenAndServe("0.0.0.0:8080", proxyMux); err != nil {
+		if err := http.ListenAndServe("0.2.0.0:8080", proxyMux); err != nil {
 			log.Fatal("Proxy server failed to start:", err)
 		}
 	}()

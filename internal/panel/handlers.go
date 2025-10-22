@@ -57,6 +57,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) indexHandler(w http.ResponseWriter, r *http.Request) {
 	if err := h.tmpl.ExecuteTemplate(w, "layout.html", struct{ Rules map[string]*storage.Rule }{Rules: h.store.All()}); err != nil {
+		log.Printf("Failed to execute template: %v", err) // Added logging
 		http.Error(w, "failed to execute template", http.StatusInternalServerError)
 	}
 }
@@ -97,4 +98,8 @@ func (h *Handler) removeRuleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	h.store.Remove(host)
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (h *Handler) ServeStyles(w http.ResponseWriter, r *http.Request) {
+    http.ServeFile(w, r, "internal/panel/templates/styles.css")
 }

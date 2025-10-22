@@ -1,11 +1,11 @@
 {{define "index.html"}}
-<div class="header">
-    <h1>Control Panel</h1>
-</div>
+<div class="container">
+    <div class="header">
+        <h1>Control Panel</h1>
+    </div>
 
-<div class="card">
-    <div class="card-header">Manage Rules</div>
-    <div class="card-body">
+    <div class="card">
+        <div class="card-header">Manage Rules</div>
         <div class="card-body">
             <form action="/add" method="post" class="form-inline">
                 <div class="form-group">
@@ -18,38 +18,37 @@
             </form>
         </div>
     </div>
-</div>
 
-
-<div class="card">
-    <div class="card-header">Current Rules</div>
-    <div class="card-body">
-        <ul class="rule-list">
-            {{range $host, $rule := .Rules}}
-            <li class="rule-item">
-                <div class="rule-info">
-                    <div class="domain">{{$host}}</div>
-                    <div class="target">{{$rule.Target}}</div>
-                </div>
-                <div class="rule-status">
-                    <span class="status-indicator {{if $rule.ServiceDown}}status-offline{{else}}status-online{{end}}"></span>
-                    <div class="last-access">
-                        {{if not $rule.LastAccess.IsZero}}
-                            Last used: {{$rule.LastAccess.Format "2006-01-02 15:04:05"}}
-                        {{else}}
-                            Never used
-                        {{end}}
+    <div class="card">
+        <div class="card-header">Current Rules</div>
+        <div class="card-body">
+            <ul class="rule-list">
+                {{range $host, $rule := .Rules}}
+                <li class="rule-item">
+                    <div class="rule-info">
+                        <div class="domain">{{$host}}</div>
+                        <div class="target">{{$rule.Target}}</div>
                     </div>
-                </div>
-                <div class="actions">
-                    <form action="/remove" method="post">
-                        <input type="hidden" name="host" value="{{$host}}">
-                        <button type="submit" class="btn btn-danger">Remove</button>
-                    </form>
-                </div>
-            </li>
-            {{end}}
-        </ul>
+                    <div class="rule-status">
+                        <span class="status-indicator {{if $rule.ServiceDown}}status-offline{{else}}status-online{{end}}"></span>
+                        <div class="last-access">
+                            {{if not $rule.LastAccess.IsZero}}
+                                Last used: {{$rule.LastAccess.Format "2006-01-02 15:04:05"}}
+                            {{else}}
+                                Never used
+                            {{end}}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <form action="/remove" method="post">
+                            <input type="hidden" name="host" value="{{$host}}">
+                            <button type="submit" class="btn btn-danger">Remove</button>
+                        </form>
+                    </div>
+                </li>
+                {{end}}
+            </ul>
+        </div>
     </div>
 </div>
 {{end}}
