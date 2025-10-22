@@ -24,7 +24,5 @@ func main() {
 	}()
 
 	// Запускаем сам прокси
-	if err := proxy.StartProxy(cfg, rules); err != nil {
-		log.Fatalf("Ошибка запуска прокси: %v", err)
-	}
+	proxy.StartProxy(rules)
 }

@@ -1,79 +1,69 @@
 package proxy
 
 import (
+	"context"
 	"crypto/tls"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"router/internal/storage"
 	"strings"
-	"time"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
-type Route struct {
-	Domain string
-	Target string
-}
-
-type ProxyServer struct {
-	Routes []Route
-}
-
-func NewProxyServer(routes []Route) *ProxyServer {
-	return &ProxyServer{Routes: routes}
-}
-
-func (ps *ProxyServer) Start() {
-	// Собираем список доменов
-	var domains []string
-	for _, r := range ps.Routes {
-		if !contains(domains, r.Domain) {
-			domains = append(domains, r.Domain)
-		}
-	}
-
-	// Настройка autocert
+func StartProxy(rules *storage.RuleStore) {
 	certManager := autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		Cache:      autocert.DirCache("certs"), // Папка для сертификатов
-		HostPolicy: autocert.HostWhitelist(domains...),
+		Prompt: autocert.AcceptTOS,
+		Cache:  autocert.DirCache("certs"),
+		HostPolicy: func(ctx context.Context, host string) error {
+			if !rules.Exists(host) {
+				return context.DeadlineExceeded // Используем DeadlineExceeded, как рекомендуется в документации
+			}
+			return nil
+		},
 	}
 
-	// HTTP → HTTPS редирект
+	// HTTP -> HTTPS redirect
 	go func() {
 		log.Println("HTTP to HTTPS redirect server running on :80")
-		http.ListenAndServe(":80", certManager.HTTPHandler(nil))
+		if err := http.ListenAndServe(":80", certManager.HTTPHandler(nil)); err != nil {
+			log.Printf("HTTP redirect server error: %v", err)
+		}
 	}()
 
-	// HTTPS сервер с автосертификатами
 	server := &http.Server{
 		Addr: ":443",
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
 			MinVersion:     tls.VersionTLS12,
 		},
-		Handler: ps,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			target, ok := rules.GetTarget(r.Host)
+			if !ok {
+				http.Error(w, "Domain not found", http.StatusNotFound)
+				return
+			}
+
+			if !strings.HasPrefix(target, "http") {
+				target = "http://" + target
+			}
+
+			targetURL, err := url.Parse(target)
+			if err != nil {
+				log.Printf("Error parsing target URL for host %s: %v", r.Host, err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			proxy := httputil.NewSingleHostReverseProxy(targetURL)
+			proxy.ServeHTTP(w, r)
+		}),
 	}
 
 	log.Println("HTTPS proxy server running on :443 with autocert")
-	log.Fatal(server.ListenAndServeTLS("", "")) // Пустые пути → autocert
-}
-
-func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	for _, route := range ps.Routes {
-		if strings.EqualFold(r.Host, route.Domain) {
-			http.Redirect(w, r, route.Target, http.StatusTemporaryRedirect)
-			return
-		}
+	if err := server.ListenAndServeTLS("", ""); err != nil {
+		log.Fatalf("HTTPS proxy server error: %v", err)
 	}
-	http.Error(w, "Domain not found", http.StatusNotFound)
-}
-
-func contains(slice []string, val string) bool {
-	for _, item := range slice {
-		if item == val {
-			return true
-		}
-	}
-	return false
 }

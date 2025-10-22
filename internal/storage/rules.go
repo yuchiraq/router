@@ -39,3 +39,10 @@ func (s *RuleStore) All() map[string]string {
 	}
 	return copy
 }
+
+func (s *RuleStore) Exists(host string) bool {
+	s.RLock()
+	defer s.RUnlock()
+	_, ok := s.rules[host]
+	return ok
+}
