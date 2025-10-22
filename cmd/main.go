@@ -43,8 +43,8 @@ func main() {
 
 	// Start servers
 	go func() {
-		log.Println("Proxy server starting on 0.0.0.0:8080")
-		if err := http.ListenAndServe("0.0.0.0:8080", proxyMux); err != nil {
+		log.Println("Proxy server starting on 0.0.0.0:80")
+		if err := http.ListenAndServe("0.0.0.0:80", proxyMux); err != nil {
 			log.Fatal("Proxy server failed to start:", err)
 		}
 	}()
