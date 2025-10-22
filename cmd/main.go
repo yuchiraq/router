@@ -42,15 +42,15 @@ func main() {
 
 	// Start servers
 	go func() {
-		log.Println("Proxy server starting on :8080")
-		if err := http.ListenAndServe(":8080", proxyMux); err != nil {
+		log.Println("Proxy server starting on 0.0.0.0:8080")
+		if err := http.ListenAndServe("0.0.0.0:8080", proxyMux); err != nil {
 			log.Fatal("Proxy server failed to start:", err)
 		}
 	}()
 
 	go func() {
-		log.Println("Panel server starting on :8182")
-		if err := http.ListenAndServe(":8182", panelMux); err != nil {
+		log.Println("Panel server starting on 0.0.0.0:8182")
+		if err := http.ListenAndServe("0.0.0.0:8182", panelMux); err != nil {
 			log.Fatal("Panel server failed to start:", err)
 		}
 	}()
