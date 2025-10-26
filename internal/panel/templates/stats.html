@@ -33,6 +33,8 @@
 </div>
 
 <script>
+    console.log("Initializing statistics page...");
+
     // --- Chart Configuration ---
     const colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
 
@@ -59,7 +61,7 @@
             intersect: false,
             mode: 'index',
         },
-        tension: 0.4, // Make lines curvy
+        tension: 0.4,
     };
 
     // --- Memory Chart --- //
@@ -68,7 +70,7 @@
         data: {
             labels: [],
             datasets: [{
-                label: 'Memory Usage (%)',
+                label: 'Memory Usage (% Rhett)',
                 data: [],
                 borderColor: '#0A84FF',
                 backgroundColor: 'rgba(10, 132, 255, 0.2)',
@@ -81,7 +83,7 @@
                 ...chartOptions.scales,
                 y: {
                     ...chartOptions.scales.y,
-                    max: 100, // Y-axis from 0 to 100%
+                    max: 100,
                 }
             }
         }
@@ -96,53 +98,89 @@
 
     // --- Data Fetching ---
     function fetchData() {
+        console.log("Fetching /stats/data...");
         fetch('/stats/data')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
+                console.log("Data received:", data);
+
                 // Update Memory Chart
                 memoryChart.data.labels = data.memory.labels;
                 memoryChart.data.datasets[0].data = data.memory.percents;
                 memoryChart.update();
 
                 // Update Requests Chart
-                requestsChart.data.labels = data.requests.labels;
-
-                // Dynamically update datasets for each host
-                data.requests.datasets.forEach(newDataset => {
-                    const existingDataset = requestsChart.data.datasets.find(d => d.label === newDataset.label);
-                    if (existingDataset) {
-                        existingDataset.data = newDataset.data;
-                    } else {
-                        const color = colorHash.hex(newDataset.label);
-                        requestsChart.data.datasets.push({
-                            ...newDataset,
-                            borderColor: color,
-                            backgroundColor: color + '33', // Add alpha for fill
-                            fill: true,
-                        });
-                    }
-                });
-                requestsChart.update();
+                if (data.requests && data.requests.datasets) {
+                    requestsChart.data.labels = data.requests.labels;
+                    data.requests.datasets.forEach(newDataset => {
+                        const existingDataset = requestsChart.data.datasets.find(d => d.label === newDataset.label);
+                        if (existingDataset) {
+                            existingDataset.data = newDataset.data;
+                        } else {
+                            const color = colorHash.hex(newDataset.label);
+                            requestsChart.data.datasets.push({
+                                ...newDataset,
+                                borderColor: color,
+                                backgroundColor: color + '33',
+                                fill: true,
+                            });
+                        }
+                    });
+                    requestsChart.update();
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching stats data:', error);
             });
     }
 
-    setInterval(fetchData, 3000); // Fetch every 3 seconds
-    fetchData();
-
     // --- WebSocket for Logs ---
     const logConsole = document.getElementById('log-console');
-    const socket = new WebSocket(`ws://${window.location.host}/ws/logs`);
+    const socketUrl = `ws://${window.location.host}/ws/logs`;
+    console.log(`Connecting to WebSocket at: ${socketUrl}`);
+
+    const socket = new WebSocket(socketUrl);
+
+    socket.onopen = function(event) {
+        console.log("WebSocket connection established.");
+        const message = document.createElement('div');
+        message.style.color = 'var(--accent-green)';
+        message.textContent = '[Connected to log stream]';
+        logConsole.appendChild(message);
+    };
 
     socket.onmessage = function(event) {
         const message = document.createElement('div');
         const parts = event.data.split(" ");
         message.innerHTML = `<span style="color: #a0a0a5">${parts.slice(0, 2).join(" ")}</span> ${parts.slice(2).join(" ")}`;
         logConsole.appendChild(message);
-        if (logConsole.childElementCount > 200) { // Keep DOM size manageable
+        if (logConsole.childElementCount > 200) {
             logConsole.removeChild(logConsole.firstChild);
         }
         logConsole.scrollTop = logConsole.scrollHeight;
     };
+
+    socket.onerror = function(error) {
+        console.error('WebSocket Error:', error);
+    };
+
+    socket.onclose = function(event) {
+        console.warn('WebSocket connection closed.', event);
+        const message = document.createElement('div');
+        message.style.color = 'var(--accent-red)';
+        message.textContent = `[Disconnected from log stream. Code: ${event.code}]`;
+        logConsole.appendChild(message);
+    };
+
+    // --- Initial Load & Interval ---
+    setInterval(fetchData, 3000);
+    fetchData();
+    console.log("Initialized charts and data fetching.");
 
 </script>
 {{end}}
