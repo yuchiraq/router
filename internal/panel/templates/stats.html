@@ -1,70 +1,69 @@
+{{define "title"}}Stats{{end}}
+
 {{define "head"}}
-    <title>Статистика</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {{end}}
 
 {{define "content"}}
-<h1>Статистика</h1>
-<canvas id="requestsChart"></canvas>
-<canvas id="memoryChart"></canvas>
+<div class="header">
+    <h1>Stats</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">Requests per hour</div>
+    <div class="card-body">
+        <canvas id="requests-chart"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Memory Usage</div>
+    <div class="card-body">
+        <canvas id="memory-chart"></canvas>
+    </div>
+</div>
+
 <script>
-    let requestsChart;
-    let memoryChart;
+    const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Requests',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.4,
+                fill: true
+            }]
+        }
+    });
+
+    const memoryChart = new Chart(document.getElementById('memory-chart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Memory (MB)',
+                data: [],
+                borderColor: 'rgb(255, 99, 132)',
+                tension: 0.4,
+                fill: true
+            }]
+        }
+    });
 
     function fetchData() {
-        fetch('/debug/vars')
+        fetch('/stats/data')
             .then(response => response.json())
             .then(data => {
-                updateRequestsChart(data);
-                updateMemoryChart(data);
+                requestsChart.data.labels = data.requests.labels;
+                requestsChart.data.datasets[0].data = data.requests.values;
+                requestsChart.update();
+
+                memoryChart.data.labels = data.memory.labels;
+                memoryChart.data.datasets[0].data = data.memory.values;
+                memoryChart.update();
             });
-    }
-
-    function updateRequestsChart(data) {
-        const ctx = document.getElementById('requestsChart').getContext('2d');
-        if (requestsChart) {
-            requestsChart.destroy();
-        }
-        requestsChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: Object.keys(data).filter(k => k.startsWith('requests_')),
-                datasets: [{
-                    label: 'Requests per domain',
-                    data: Object.keys(data).filter(k => k.startsWith('requests_')).map(k => data[k]),
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }]
-            }
-        });
-    }
-
-    function updateMemoryChart(data) {
-        const memstats = data.memstats;
-        const ctx = document.getElementById('memoryChart').getContext('2d');
-        if (memoryChart) {
-            memoryChart.destroy();
-        }
-        memoryChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Alloc', 'TotalAlloc', 'Sys', 'HeapAlloc', 'HeapSys'],
-                datasets: [{
-                    label: 'Memory Usage (bytes)',
-                    data: [
-                        memstats.Alloc,
-                        memstats.TotalAlloc,
-                        memstats.Sys,
-                        memstats.HeapAlloc,
-                        memstats.HeapSys
-                    ],
-                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    borderWidth: 1
-                }]
-            }
-        });
     }
 
     setInterval(fetchData, 5000);

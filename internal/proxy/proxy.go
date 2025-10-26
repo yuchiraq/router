@@ -1,22 +1,23 @@
 package proxy
 
 import (
-	"expvar"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"router/internal/stats"
 	"router/internal/storage"
 )
 
 // Proxy is a reverse proxy that uses a RuleStore to determine the target.
 type Proxy struct {
 	store *storage.RuleStore
+	stats *stats.Stats
 }
 
 // NewProxy creates a new Proxy.
-func NewProxy(store *storage.RuleStore) *Proxy {
-	return &Proxy{store: store}
+func NewProxy(store *storage.RuleStore, stats *stats.Stats) *Proxy {
+	return &Proxy{store: store, stats: stats}
 }
 
 // ServeHTTP handles the proxying of requests.
@@ -27,12 +28,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Increment request counter for the domain
-	requests := expvar.Get("requests_" + r.Host)
-	if requests == nil {
-		requests = expvar.NewInt("requests_" + r.Host)
-	}
-	requests.(*expvar.Int).Add(1)
+	p.stats.AddRequest()
 
 	targetURL, err := url.Parse("http://" + target)
 	if err != nil {
