@@ -33,16 +33,15 @@ type Handler struct {
 func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
 	templates := make(map[string]*template.Template)
 
-	// Base layout
-	layout := template.Must(template.ParseFiles("internal/panel/templates/layout.html"))
-
-	// Index page
-	indexTmpl := template.Must(template.Must(layout.Clone()).ParseFiles("internal/panel/templates/index.html"))
-	templates["index"] = indexTmpl
-
-	// Stats page
-	statsTmpl := template.Must(template.Must(layout.Clone()).ParseFiles("internal/panel/templates/stats.html"))
-	templates["stats"] = statsTmpl
+	// Parse templates, associating the layout with each page correctly
+	templates["index"] = template.Must(template.ParseFiles(
+		"internal/panel/templates/layout.html",
+		"internal/panel/templates/index.html",
+	))
+	templates["stats"] = template.Must(template.ParseFiles(
+		"internal/panel/templates/layout.html",
+		"internal/panel/templates/stats.html",
+	))
 
 	return &Handler{
 		store:       store,
@@ -72,7 +71,7 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// render executes the correct template
+// render executes the correct template, ensuring page data is passed
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data interface{}) {
 	tmpl, ok := h.templates[name]
 	if !ok {
@@ -80,14 +79,15 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 		return
 	}
 
-	// Add active page data to the template
+	// This structure is passed to the template
 	templateData := map[string]interface{}{
-		"Page": name,
-		"Data": data,
+		"Page": name, // Used to set the 'active' class on nav links
+		"Data": data, // The specific data for the page (e.g., rules or stats)
 	}
 
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
 		log.Printf("Error executing template %s: %v", name, err)
+        http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
 
@@ -104,6 +104,8 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 // Stats serves the statistics page
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+        // We pass hosts to the template, though it's not currently used in stats.html
+        // The main data is fetched via JS
         _, hosts := h.stats.GetRequestData()
         data := map[string]interface{}{
             "Hosts": hosts, 
