@@ -1,20 +1,19 @@
-{{define "title"}}Control Panel{{end}}
+
+{{define "title"}}Home{{end}}
+
+{{define "head"}}{{end}} {{/* Define an empty head block to satisfy the layout */}}
 
 {{define "content"}}
 <div class="header">
-    <h1>Control Panel</h1>
+    <h1>Rules</h1>
 </div>
 
 <div class="card">
-    <div class="card-header">Manage Rules</div>
+    <div class="card-header">Add New Rule</div>
     <div class="card-body">
         <form action="/add" method="post" class="form-inline">
-            <div class="form-group">
-                <input type="text" name="host" placeholder="Domain (e.g., example.com)" required class="form-control">
-            </div>
-            <div class="form-group">
-                <input type="text" name="target" placeholder="Target (e.g., localhost:8080)" required class="form-control">
-            </div>
+            <input type="text" name="host" class="form-control" placeholder="example.com" required>
+            <input type="text" name="target" class="form-control" placeholder="http://localhost:3000" required>
             <button type="submit" class="btn">Add Rule</button>
         </form>
     </div>
@@ -24,29 +23,23 @@
     <div class="card-header">Current Rules</div>
     <div class="card-body">
         <ul class="rule-list">
-            {{range $host, $rule := .Rules}}
-            <li class="rule-item">
-                <div class="rule-info">
-                    <div class="domain">{{$host}}</div>
-                    <div class="target">{{$rule.Target}}</div>
-                </div>
-                <div class="rule-status">
-                    <span class="status-indicator {{if $rule.ServiceDown}}status-offline{{else}}status-online{{end}}"></span>
-                    <div class="last-access">
-                        {{if not $rule.LastAccess.IsZero}}
-                            Last used: {{$rule.LastAccess.Format "2006-01-02 15:04:05"}}
-                        {{else}}
-                            Never used
-                        {{end}}
+            {{if not .Rules}}
+                <p>No rules have been added yet.</p>
+            {{else}}
+                {{range .Rules}}
+                <li class="rule-item">
+                    <div class="rule-info">
+                        <span class="domain">{{.Host}}</span>
+                        <span class="target">{{.Target}}</span>
                     </div>
-                </div>
-                <div class="actions">
-                    <form action="/remove" method="post">
-                        <input type="hidden" name="host" value="{{$host}}">
-                        <button type="submit" class="btn btn-danger">Remove</button>
-                    </form>
-                </div>
-            </li>
+                    <div class="rule-actions">
+                        <form action="/remove" method="post" style="display: inline;">
+                            <input type="hidden" name="host" value="{{.Host}}">
+                            <button type="submit" class="btn btn-danger">Remove</button>
+                        </form>
+                    </div>
+                </li>
+                {{end}}
             {{end}}
         </ul>
     </div>
