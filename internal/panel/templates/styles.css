@@ -1,56 +1,77 @@
-body {
-    font-family: 'Inter', sans-serif;
-    background-color: #f0f2f5;
-    color: #333;
-    margin: 0;
-    padding-top: 60px;
+
+/* --- Base & Fonts --- */
+:root {
+    --bg-color: #161618;
+    --card-color: #1e1e20;
+    --border-color: rgba(255, 255, 255, 0.1);
+    --text-primary: #f0f0f5;
+    --text-secondary: #a0a0a5;
+    --accent-blue: #0A84FF;
+    --accent-blue-hover: #0077e6;
+    --accent-red: #FF453A;
+    --accent-red-hover: #ff2d21;
+    --accent-green: #30D158;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: 'Menlo', 'DejaVu Sans Mono', monospace;
 }
 
+body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    margin: 0;
+    padding-top: 60px; /* Nav height */
+}
+
+/* --- Navigation --- */
 .nav {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     height: 60px;
-    background-color: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    background-color: rgba(22, 22, 24, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
     z-index: 1000;
 }
 
 .nav-container {
-    max-width: 960px;
+    max-width: 1024px;
     margin: 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
     height: 100%;
-    padding: 0 20px;
+    padding: 0 24px;
 }
 
 .nav-logo {
     font-weight: 700;
     font-size: 20px;
     text-decoration: none;
-    color: #333;
+    color: var(--text-primary);
 }
 
 .nav-links a {
     text-decoration: none;
-    color: #555;
-    margin-left: 20px;
-    transition: color 0.3s ease;
+    color: var(--text-secondary);
+    margin-left: 24px;
+    font-weight: 500;
+    transition: color 0.2s ease-in-out;
 }
 
-.nav-links a:hover {
-    color: #007aff;
+.nav-links a:hover, .nav-links a.active {
+    color: var(--text-primary);
 }
 
+
+/* --- Layout & Cards --- */
 .container {
-    max-width: 960px;
-    margin: 20px auto;
-    padding: 0 20px;
+    max-width: 1024px;
+    margin: 32px auto;
+    padding: 0 24px;
 }
 
 .header {
@@ -58,72 +79,88 @@ body {
 }
 
 .header h1 {
-    font-size: 32px;
+    font-size: 36px;
     font-weight: 700;
     margin: 0;
+    letter-spacing: -0.02em;
 }
 
 .card {
-    background-color: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    margin-bottom: 20px;
+    background-color: var(--card-color);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    margin-bottom: 24px;
     overflow: hidden;
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 .card-header {
-    padding: 16px 20px;
-    background-color: #f7f7f7;
-    border-bottom: 1px solid #e5e5e5;
-    font-weight: 500;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--text-primary);
 }
 
 .card-body {
-    padding: 20px;
+    padding: 24px;
 }
 
+/* --- Forms & Buttons --- */
 .form-inline {
     display: flex;
-    gap: 10px;
+    gap: 16px;
+    align-items: center;
 }
 
 .form-control {
     flex: 1;
-    padding: 10px 14px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 14px;
-    transition: border-color 0.3s ease;
+    padding: 12px 16px;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 15px;
+    color: var(--text-primary);
+    transition: all 0.2s ease-in-out;
 }
 
 .form-control:focus {
-    border-color: #007aff;
+    border-color: var(--accent-blue);
     outline: none;
+    box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
 }
 
 .btn {
-    padding: 10px 20px;
+    padding: 12px 24px;
     border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-.btn:hover {
-    background-color: #0056b3;
-}
-
-.btn-danger {
-    background-color: #ff3b30;
+    transition: all 0.2s ease-in-out;
+    background-color: var(--accent-blue);
     color: white;
 }
 
-.btn-danger:hover {
-    background-color: #c00;
+.btn:hover {
+    background-color: var(--accent-blue-hover);
+    transform: translateY(-1px);
 }
 
+.btn-danger {
+    background-color: var(--accent-red);
+}
+
+.btn-danger:hover {
+    background-color: var(--accent-red-hover);
+}
+
+
+/* --- Rule List --- */
 .rule-list {
     list-style: none;
     padding: 0;
@@ -134,50 +171,84 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 0;
-    border-bottom: 1px solid #e5e5e5;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
 }
 
 .rule-item:last-child {
     border-bottom: none;
 }
 
+.rule-item:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
 .rule-info {
     display: flex;
     flex-direction: column;
+    gap: 4px;
 }
 
 .domain {
-    font-weight: 500;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 16px;
 }
 
 .target {
-    color: #888;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.rule-status {
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
 }
 
 .status-indicator {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    margin-right: 8px;
+    margin-right: 10px;
+    box-shadow: 0 0 8px 2px var(--color);
 }
 
 .status-online {
-    background-color: #34c759;
+    background-color: var(--accent-green);
+    --color: var(--accent-green);
 }
 
 .status-offline {
-    background-color: #ff3b30;
+    background-color: var(--accent-red);
+    --color: var(--accent-red);
 }
 
-#log-console {
-    height: 300px;
-    background-color: #282c34;
-    color: #abb2bf;
-    font-family: 'Menlo', 'DejaVu Sans Mono', monospace;
+.last-access {
     font-size: 13px;
-    padding: 15px;
-    border-radius: 8px;
+}
+
+
+/* --- Stats & Logs --- */
+#log-console {
+    height: 350px;
+    background-color: #111;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
     overflow-y: scroll;
     white-space: pre-wrap;
+}
+
+#log-console > div {
+    padding: 2px 0;
+}
+
+canvas {
+    width: 100% !important;
+    height: 300px !important;
 }

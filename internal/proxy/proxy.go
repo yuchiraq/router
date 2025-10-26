@@ -1,3 +1,4 @@
+
 package proxy
 
 import (
@@ -28,7 +29,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.stats.AddRequest()
+	// Add request to stats with the specific host
+	p.stats.AddRequest(r.Host)
 
 	targetURL, err := url.Parse("http://" + target)
 	if err != nil {

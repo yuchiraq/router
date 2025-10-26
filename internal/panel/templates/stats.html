@@ -1,88 +1,146 @@
+
 {{define "title"}}Stats{{end}}
 
 {{define "head"}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/color-hash@2.0.2/dist/color-hash.min.js"></script>
 {{end}}
 
 {{define "content"}}
 <div class="header">
-    <h1>Stats</h1>
+    <h1>Dashboard</h1>
 </div>
 
 <div class="card">
-    <div class="card-header">Requests per hour</div>
-    <div class="card-body">
-        <canvas id="requests-chart"></canvas>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header">Memory Usage</div>
+    <div class="card-header">Memory Usage (%)</div>
     <div class="card-body">
         <canvas id="memory-chart"></canvas>
     </div>
 </div>
 
 <div class="card">
-    <div class="card-header">Logs</div>
+    <div class="card-header">Requests Per Hour</div>
+    <div class="card-body">
+        <canvas id="requests-chart"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Live Logs</div>
     <div class="card-body">
         <div id="log-console"></div>
     </div>
 </div>
 
 <script>
-    const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Requests',
-                data: [],
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.4,
-                fill: true
-            }]
-        }
-    });
+    // --- Chart Configuration ---
+    const colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
 
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            x: {
+                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                ticks: { color: '#a0a0a5' }
+            },
+            y: {
+                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                ticks: { color: '#a0a0a5' },
+                beginAtZero: true
+            }
+        },
+        plugins: {
+            legend: {
+                labels: { color: '#f0f0f5' }
+            }
+        },
+        interaction: {
+            intersect: false,
+            mode: 'index',
+        },
+        tension: 0.4, // Make lines curvy
+    };
+
+    // --- Memory Chart --- //
     const memoryChart = new Chart(document.getElementById('memory-chart').getContext('2d'), {
         type: 'line',
         data: {
             labels: [],
             datasets: [{
-                label: 'Memory (MB)',
+                label: 'Memory Usage (%)',
                 data: [],
-                borderColor: 'rgb(255, 99, 132)',
-                tension: 0.4,
-                fill: true
+                borderColor: '#0A84FF',
+                backgroundColor: 'rgba(10, 132, 255, 0.2)',
+                fill: true,
             }]
+        },
+        options: {
+            ...chartOptions,
+            scales: {
+                ...chartOptions.scales,
+                y: {
+                    ...chartOptions.scales.y,
+                    max: 100, // Y-axis from 0 to 100%
+                }
+            }
         }
     });
 
+    // --- Requests Chart --- //
+    const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: chartOptions,
+    });
+
+    // --- Data Fetching ---
     function fetchData() {
         fetch('/stats/data')
             .then(response => response.json())
             .then(data => {
-                requestsChart.data.labels = data.requests.labels;
-                requestsChart.data.datasets[0].data = data.requests.values;
-                requestsChart.update();
-
+                // Update Memory Chart
                 memoryChart.data.labels = data.memory.labels;
-                memoryChart.data.datasets[0].data = data.memory.values;
+                memoryChart.data.datasets[0].data = data.memory.percents;
                 memoryChart.update();
+
+                // Update Requests Chart
+                requestsChart.data.labels = data.requests.labels;
+
+                // Dynamically update datasets for each host
+                data.requests.datasets.forEach(newDataset => {
+                    const existingDataset = requestsChart.data.datasets.find(d => d.label === newDataset.label);
+                    if (existingDataset) {
+                        existingDataset.data = newDataset.data;
+                    } else {
+                        const color = colorHash.hex(newDataset.label);
+                        requestsChart.data.datasets.push({
+                            ...newDataset,
+                            borderColor: color,
+                            backgroundColor: color + '33', // Add alpha for fill
+                            fill: true,
+                        });
+                    }
+                });
+                requestsChart.update();
             });
     }
 
-    setInterval(fetchData, 5000);
+    setInterval(fetchData, 3000); // Fetch every 3 seconds
     fetchData();
 
+    // --- WebSocket for Logs ---
     const logConsole = document.getElementById('log-console');
     const socket = new WebSocket(`ws://${window.location.host}/ws/logs`);
 
     socket.onmessage = function(event) {
         const message = document.createElement('div');
-        message.textContent = event.data;
+        const parts = event.data.split(" ");
+        message.innerHTML = `<span style="color: #a0a0a5">${parts.slice(0, 2).join(" ")}</span> ${parts.slice(2).join(" ")}`;
         logConsole.appendChild(message);
+        if (logConsole.childElementCount > 200) { // Keep DOM size manageable
+            logConsole.removeChild(logConsole.firstChild);
+        }
         logConsole.scrollTop = logConsole.scrollHeight;
     };
 

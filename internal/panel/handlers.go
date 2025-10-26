@@ -1,3 +1,4 @@
+
 package panel
 
 import (
@@ -14,33 +15,46 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// Allow all connections by default.
-		return true
+		return true // Allow all connections
 	},
 }
 
+// Handler holds all dependencies for the web panel
 type Handler struct {
 	store       *storage.RuleStore
 	username    string
 	password    string
-	tmpl        *template.Template
+	templates   map[string]*template.Template
 	stats       *stats.Stats
 	broadcaster *logstream.Broadcaster
 }
 
+// NewHandler creates a new panel handler
 func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
-	tmpl := template.Must(template.ParseGlob("internal/panel/templates/*.html"))
+	templates := make(map[string]*template.Template)
+
+	// Base layout
+	layout := template.Must(template.ParseFiles("internal/panel/templates/layout.html"))
+
+	// Index page
+	indexTmpl := template.Must(template.Must(layout.Clone()).ParseFiles("internal/panel/templates/index.html"))
+	templates["index"] = indexTmpl
+
+	// Stats page
+	statsTmpl := template.Must(template.Must(layout.Clone()).ParseFiles("internal/panel/templates/stats.html"))
+	templates["stats"] = statsTmpl
 
 	return &Handler{
 		store:       store,
 		username:    username,
 		password:    password,
-		tmpl:        tmpl,
+		templates:   templates,
 		stats:       stats,
 		broadcaster: broadcaster,
 	}
 }
 
+// basicAuth is a middleware for basic authentication
 func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.username == "" && h.password == "" {
@@ -58,25 +72,47 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// render executes the correct template
+func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data interface{}) {
+	tmpl, ok := h.templates[name]
+	if !ok {
+		http.Error(w, "Template not found", http.StatusInternalServerError)
+		return
+	}
+
+	// Add active page data to the template
+	templateData := map[string]interface{}{
+		"Page": name,
+		"Data": data,
+	}
+
+	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
+		log.Printf("Error executing template %s: %v", name, err)
+	}
+}
+
+// Index serves the main page with the list of rules
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{
 			"Rules": h.store.All(),
 		}
-		if err := h.tmpl.ExecuteTemplate(w, "layout", data); err != nil {
-			log.Printf("Error executing template: %v", err)
-		}
+		h.render(w, r, "index", data)
 	}).ServeHTTP(w, r)
 }
 
+// Stats serves the statistics page
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		if err := h.tmpl.ExecuteTemplate(w, "layout", nil); err != nil {
-			log.Printf("Error executing template: %v", err)
-		}
+        _, hosts := h.stats.GetRequestData()
+        data := map[string]interface{}{
+            "Hosts": hosts, 
+        }
+		h.render(w, r, "stats", data)
 	}).ServeHTTP(w, r)
 }
 
+// AddRule adds a new routing rule
 func (h *Handler) AddRule(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -94,6 +130,7 @@ func (h *Handler) AddRule(w http.ResponseWriter, r *http.Request) {
 	}).ServeHTTP(w, r)
 }
 
+// RemoveRule removes a routing rule
 func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -110,23 +147,22 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 	}).ServeHTTP(w, r)
 }
 
+// ServeStyles serves the CSS file
 func (h *Handler) ServeStyles(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "internal/panel/templates/styles.css")
 }
 
+// StatsData provides stats data as JSON
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		requestLabels, requestValues := h.stats.GetRequestData()
-		memoryLabels, memoryValues := h.stats.GetMemoryData()
+		requestData, _ := h.stats.GetRequestData()
+		memoryLabels, _, memoryPercents := h.stats.GetMemoryData()
 
 		data := map[string]interface{}{
-			"requests": map[string]interface{}{
-				"labels": requestLabels,
-				"values": requestValues,
-			},
-			"memory": map[string]interface{}{
-				"labels": memoryLabels,
-				"values": memoryValues,
+			"requests": requestData,
+			"memory": {
+				"labels":   memoryLabels,
+				"percents": memoryPercents,
 			},
 		}
 
@@ -137,6 +173,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	}).ServeHTTP(w, r)
 }
 
+// Logs handles the websocket connection for logs
 func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
