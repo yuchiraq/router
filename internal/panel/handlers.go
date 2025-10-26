@@ -160,7 +160,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 
 		data := map[string]interface{}{
 			"requests": requestData,
-			"memory": {
+			"memory":   map[string]interface{}{
 				"labels":   memoryLabels,
 				"percents": memoryPercents,
 			},
