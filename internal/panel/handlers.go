@@ -5,27 +5,39 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+
+	"github.com/gorilla/websocket"
+	"router/internal/logstream"
 	"router/internal/stats"
 	"router/internal/storage"
 )
 
-type Handler struct {
-	store    *storage.RuleStore
-	username string
-	password string
-	tmpl     *template.Template
-	stats    *stats.Stats
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		// Allow all connections by default.
+		return true
+	},
 }
 
-func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats) *Handler {
+type Handler struct {
+	store       *storage.RuleStore
+	username    string
+	password    string
+	tmpl        *template.Template
+	stats       *stats.Stats
+	broadcaster *logstream.Broadcaster
+}
+
+func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
 	tmpl := template.Must(template.ParseGlob("internal/panel/templates/*.html"))
 
 	return &Handler{
-		store:    store,
-		username: username,
-		password: password,
-		tmpl:     tmpl,
-		stats:    stats,
+		store:       store,
+		username:    username,
+		password:    password,
+		tmpl:        tmpl,
+		stats:       stats,
+		broadcaster: broadcaster,
 	}
 }
 
@@ -54,7 +66,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 		if err := h.tmpl.ExecuteTemplate(w, "layout", data); err != nil {
 			log.Printf("Error executing template: %v", err)
 		}
-	}).ServeHTTP(w,r)
+	}).ServeHTTP(w, r)
 }
 
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +74,7 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 		if err := h.tmpl.ExecuteTemplate(w, "layout", nil); err != nil {
 			log.Printf("Error executing template: %v", err)
 		}
-	}).ServeHTTP(w,r)
+	}).ServeHTTP(w, r)
 }
 
 func (h *Handler) AddRule(w http.ResponseWriter, r *http.Request) {
@@ -122,5 +134,26 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(data); err != nil {
 			log.Printf("Error encoding stats data: %v", err)
 		}
-	}).ServeHTTP(w,r)
+	}).ServeHTTP(w, r)
+}
+
+func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("Failed to upgrade to websockets: %v", err)
+			return
+		}
+		defer conn.Close()
+
+		ch := make(chan []byte, 256)
+		h.broadcaster.AddListener(ch)
+		defer h.broadcaster.RemoveListener(ch)
+
+		for msg := range ch {
+			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				break
+			}
+		}
+	}).ServeHTTP(w, r)
 }

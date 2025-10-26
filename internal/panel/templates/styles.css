@@ -169,3 +169,15 @@ body {
 .status-offline {
     background-color: #ff3b30;
 }
+
+#log-console {
+    height: 300px;
+    background-color: #282c34;
+    color: #abb2bf;
+    font-family: 'Menlo', 'DejaVu Sans Mono', monospace;
+    font-size: 13px;
+    padding: 15px;
+    border-radius: 8px;
+    overflow-y: scroll;
+    white-space: pre-wrap;
+}

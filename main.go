@@ -1,11 +1,13 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"router/internal/logstream"
 	"router/internal/panel"
 	"router/internal/proxy"
 	"router/internal/stats"
@@ -18,6 +20,10 @@ func main() {
 
 	// Initialize stats
 	stats := stats.New()
+
+	// Initialize log broadcaster
+	broadcaster := logstream.New()
+	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
 
 	// Start memory recording
 	go func() {
@@ -32,27 +38,30 @@ func main() {
 	adminPass := os.Getenv("ADMIN_PASS")
 
 	// Initialize the control panel handler
-	panelHandler := panel.NewHandler(store, adminUser, adminPass, stats)
+	panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
 
 	// Initialize the proxy
 	proxyHandler := proxy.NewProxy(store, stats)
 
-	// Register panel handlers
-	http.HandleFunc("/", panelHandler.Index)
-	http.HandleFunc("/stats", panelHandler.Stats)
-	http.HandleFunc("/stats/data", panelHandler.StatsData)
-	http.HandleFunc("/add", panelHandler.AddRule)
-	http.HandleFunc("/remove", panelHandler.RemoveRule)
-	http.HandleFunc("/styles.css", panelHandler.ServeStyles)
-
-	// Register the proxy handler for the root path
-	http.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
-		// Check if the request is for the panel
-		if r.URL.Path == "/" || r.URL.Path == "/stats" || r.URL.Path == "/stats/data" || r.URL.Path == "/add" || r.URL.Path == "/remove" || r.URL.Path == "/styles.css" {
-			http.DefaultServeMux.ServeHTTP(w, r)
-			return
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			panelHandler.Index(w, r)
+		case "/stats":
+			panelHandler.Stats(w, r)
+		case "/stats/data":
+			panelHandler.StatsData(w, r)
+		case "/ws/logs":
+			panelHandler.Logs(w, r)
+		case "/add":
+			panelHandler.AddRule(w, r)
+		case "/remove":
+			panelHandler.RemoveRule(w, r)
+		case "/styles.css":
+			panelHandler.ServeStyles(w, r)
+		default:
+			proxyHandler.ServeHTTP(w, r)
 		}
-		proxyHandler.ServeHTTP(w, r)
 	})
 
 	// Start the server

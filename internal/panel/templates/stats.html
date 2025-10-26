@@ -23,6 +23,13 @@
     </div>
 </div>
 
+<div class="card">
+    <div class="card-header">Logs</div>
+    <div class="card-body">
+        <div id="log-console"></div>
+    </div>
+</div>
+
 <script>
     const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
         type: 'line',
@@ -68,5 +75,16 @@
 
     setInterval(fetchData, 5000);
     fetchData();
+
+    const logConsole = document.getElementById('log-console');
+    const socket = new WebSocket(`ws://${window.location.host}/ws/logs`);
+
+    socket.onmessage = function(event) {
+        const message = document.createElement('div');
+        message.textContent = event.data;
+        logConsole.appendChild(message);
+        logConsole.scrollTop = logConsole.scrollHeight;
+    };
+
 </script>
 {{end}}
