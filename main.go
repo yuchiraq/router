@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -88,6 +89,6 @@ func main() {
 	// Start HTTPS server
 	log.Println("Starting HTTPS server on :443")
 	if err := server.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("HTTPS server error: %v", err)
-	}
+			log.Fatalf("HTTPS server error: %v", err)
+		}
 }
