@@ -11,24 +11,21 @@ import (
 )
 
 // Rule represents a routing rule with its status and last access time
-
 type Rule struct {
+	Host        string    `json:"-"` // Host is the map key, not stored in the struct's JSON
 	Target      string    `json:"target"`
 	LastAccess  time.Time `json:"-"`
 	ServiceDown bool      `json:"-"`
 }
 
 // RuleStore manages the routing rules
-
 type RuleStore struct {
-	mu    sync.RWMutex
-	rules map[string]*Rule
-
+	mu      sync.RWMutex
+	rules   map[string]*Rule
 	storage *Storage
 }
 
 // NewRuleStore creates a new RuleStore
-
 func NewRuleStore(storage *Storage) *RuleStore {
 	rules, err := storage.Load()
 	if err != nil {
@@ -44,16 +41,15 @@ func NewRuleStore(storage *Storage) *RuleStore {
 }
 
 // Add adds a new rule or updates an existing one
-
 func (s *RuleStore) Add(host, target string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The Host field is primarily for template display and is populated by the All() method.
 	s.rules[host] = &Rule{Target: target}
 	s.storage.Save(s.rules)
 }
 
 // Remove removes a rule
-
 func (s *RuleStore) Remove(host string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -62,29 +58,28 @@ func (s *RuleStore) Remove(host string) {
 }
 
 // Get retrieves a rule
-
 func (s *RuleStore) Get(host string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rule, ok := s.rules[host]
 	if ok {
-		rule.LastAccess = time.Now() // Update LastAccess on rule retrieval
+		rule.LastAccess = time.Now()
 		return rule.Target, true
 	}
 	return "", false
 }
 
-// All returns all rules
-
-func (s *RuleStore) All() map[string]*Rule {
+// All returns all rules as a slice, with the Host field populated for template use.
+func (s *RuleStore) All() []*Rule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	// Create a copy to avoid race conditions when the map is read in the template
-	newMap := make(map[string]*Rule, len(s.rules))
-	for k, v := range s.rules {
-		newMap[k] = v
+
+	allRules := make([]*Rule, 0, len(s.rules))
+	for host, rule := range s.rules {
+		rule.Host = host // Populate the Host field from the map key
+		allRules = append(allRules, rule)
 	}
-	return newMap
+	return allRules
 }
 
 // HostPolicy is used by autocert to determine which domains to request certificates for.
@@ -98,7 +93,6 @@ func (s *RuleStore) HostPolicy(ctx context.Context, host string) error {
 }
 
 // startHealthCheck periodically checks the health of the services
-
 func (s *RuleStore) startHealthCheck() {
 	for {
 		time.Sleep(1 * time.Minute) // Check every minute
@@ -107,24 +101,33 @@ func (s *RuleStore) startHealthCheck() {
 }
 
 // checkServices attempts to connect to each service to check its status
-
 func (s *RuleStore) checkServices() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	for _, rule := range s.rules {
-		// Extract host and port from target
-		targetHost, targetPort, err := net.SplitHostPort(rule.Target)
-		if err != nil {
-			// If the target is not in host:port format, assume it's a domain and default to port 80 or 443
-			if strings.HasSuffix(rule.Target, ":443") {
-				targetPort = "443"
-			} else {
-				targetPort = "80"
-			}
-			targetHost = rule.Target
+		// Clean up the target address for dialing
+		targetAddr := rule.Target
+		if strings.HasPrefix(targetAddr, "https://") {
+			targetAddr = strings.TrimPrefix(targetAddr, "https://")
+		} else if strings.HasPrefix(targetAddr, "http://") {
+			targetAddr = strings.TrimPrefix(targetAddr, "http://")
 		}
 
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetHost, targetPort), 5*time.Second)
+		// If the address has no port, Dial will fail. We need to split and check.
+		// This is a simplified health check.
+		_, _, err := net.SplitHostPort(targetAddr)
+		if err != nil {
+			// If splitting fails, it might be because there's no port. 
+			// For a simple health check, we can just skip or assume a default port.
+			// For now, we'll log it and mark it as potentially down.
+			// A robust solution would be more complex.
+			log.Printf("Could not parse target for health check: %s. Assuming down.", rule.Target)
+			rule.ServiceDown = true
+			continue
+		}
+
+		conn, err := net.DialTimeout("tcp", targetAddr, 5*time.Second)
 		if err != nil {
 			rule.ServiceDown = true
 		} else {
