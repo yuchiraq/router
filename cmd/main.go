@@ -1,6 +1,7 @@
 package main
 
 import (
+	"expvar"
 	"log"
 	"net/http"
 
@@ -48,6 +49,8 @@ func main() {
 	panelMux.HandleFunc("/add", panelHandler.AddRule)
 	panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
 	panelMux.HandleFunc("/styles.css", panelHandler.ServeStyles)
+	panelMux.HandleFunc("/debug/vars", expvar.Handler().ServeHTTP)
+    panelMux.HandleFunc("/stats", panelHandler.Stats)
 
 	// HTTP server for ACME challenges
 	go func() {

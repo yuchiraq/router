@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"expvar"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -25,6 +26,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
+
+	// Increment request counter for the domain
+	requests := expvar.Get("requests_" + r.Host)
+	if requests == nil {
+		requests = expvar.NewInt("requests_" + r.Host)
+	}
+	requests.(*expvar.Int).Add(1)
 
 	targetURL, err := url.Parse("http://" + target)
 	if err != nil {

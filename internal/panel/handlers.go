@@ -15,8 +15,8 @@ type Handler struct {
 }
 
 func NewHandler(store *storage.RuleStore, username, password string) *Handler {
-	log.Println("Parsing templates...")
-	tmpl, err := template.ParseFiles("internal/panel/templates/layout.html", "internal/panel/templates/index.html")
+	log.Println("Parsing templates...
+	tmpl, err := template.ParseGlob("internal/panel/templates/*.html")
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
@@ -56,8 +56,24 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) indexHandler(w http.ResponseWriter, r *http.Request) {
-	if err := h.tmpl.ExecuteTemplate(w, "layout.html", struct{ Rules map[string]*storage.Rule }{Rules: h.store.All()}); err != nil {
-		log.Printf("Failed to execute template: %v", err) // Added logging
+	data := struct {
+		Rules map[string]*storage.Rule
+	}{
+		Rules: h.store.All(),
+	}
+	if err := h.tmpl.ExecuteTemplate(w, "layout.html", data); err != nil {
+		log.Printf("Failed to execute template: %v", err)
+		http.Error(w, "failed to execute template", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(h.statsHandler).ServeHTTP(w, r)
+}
+
+func (h *Handler) statsHandler(w http.ResponseWriter, r *http.Request) {
+	if err := h.tmpl.ExecuteTemplate(w, "layout.html", nil); err != nil {
+		log.Printf("Failed to execute template: %v", err)
 		http.Error(w, "failed to execute template", http.StatusInternalServerError)
 	}
 }

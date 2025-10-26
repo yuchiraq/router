@@ -3,8 +3,15 @@
 <head>
     <title>Router Control Panel</title>
     <link rel="stylesheet" type="text/css" href="/styles.css">
+    {{template "head" .}}
 </head>
 <body>
-    {{template "index.html" .}}
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/stats">Stats</a>
+    </div>
+    <div class="container">
+        {{template "content" .}}
+    </div>
 </body>
 </html>

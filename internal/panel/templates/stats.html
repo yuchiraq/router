@@ -1,0 +1,73 @@
+{{define "head"}}
+    <title>Статистика</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{end}}
+
+{{define "content"}}
+<h1>Статистика</h1>
+<canvas id="requestsChart"></canvas>
+<canvas id="memoryChart"></canvas>
+<script>
+    let requestsChart;
+    let memoryChart;
+
+    function fetchData() {
+        fetch('/debug/vars')
+            .then(response => response.json())
+            .then(data => {
+                updateRequestsChart(data);
+                updateMemoryChart(data);
+            });
+    }
+
+    function updateRequestsChart(data) {
+        const ctx = document.getElementById('requestsChart').getContext('2d');
+        if (requestsChart) {
+            requestsChart.destroy();
+        }
+        requestsChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(data).filter(k => k.startsWith('requests_')),
+                datasets: [{
+                    label: 'Requests per domain',
+                    data: Object.keys(data).filter(k => k.startsWith('requests_')).map(k => data[k]),
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            }
+        });
+    }
+
+    function updateMemoryChart(data) {
+        const memstats = data.memstats;
+        const ctx = document.getElementById('memoryChart').getContext('2d');
+        if (memoryChart) {
+            memoryChart.destroy();
+        }
+        memoryChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Alloc', 'TotalAlloc', 'Sys', 'HeapAlloc', 'HeapSys'],
+                datasets: [{
+                    label: 'Memory Usage (bytes)',
+                    data: [
+                        memstats.Alloc,
+                        memstats.TotalAlloc,
+                        memstats.Sys,
+                        memstats.HeapAlloc,
+                        memstats.HeapSys
+                    ],
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }]
+            }
+        });
+    }
+
+    setInterval(fetchData, 5000);
+    fetchData();
+</script>
+{{end}}
