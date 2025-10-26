@@ -16,7 +16,8 @@ import (
 
 func main() {
 	// Initialize storage
-	store := storage.NewRuleStore()
+	fileStorage := storage.NewStorage("rules.json")
+	store := storage.NewRuleStore(fileStorage)
 
 	// Initialize stats
 	stats := stats.New()
