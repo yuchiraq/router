@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"router/internal/proxy"
 	"router/internal/stats"
 	"router/internal/storage"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
@@ -38,36 +41,53 @@ func main() {
 	adminUser := os.Getenv("ADMIN_USER")
 	adminPass := os.Getenv("ADMIN_PASS")
 
-	// Initialize the control panel handler
-	panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
+	// --- Admin Panel (Port 8162) ---
+	go func() {
+		panelMux := http.NewServeMux()
+		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
+		panelMux.HandleFunc("/", panelHandler.Index)
+		panelMux.HandleFunc("/stats", panelHandler.Stats)
+		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
+		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
+		panelMux.HandleFunc("/add", panelHandler.AddRule)
+		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
+		panelMux.HandleFunc("/styles.css", panelHandler.ServeStyles)
+		log.Println("Starting admin panel on :8162")
+		if err := http.ListenAndServe(":8162", panelMux); err != nil {
+			log.Fatalf("Failed to start admin panel: %v", err)
+		}
+	}()
 
-	// Initialize the proxy
+	// --- Proxy (Ports 80 & 443) ---
 	proxyHandler := proxy.NewProxy(store, stats)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/":
-			panelHandler.Index(w, r)
-		case "/stats":
-			panelHandler.Stats(w, r)
-		case "/stats/data":
-			panelHandler.StatsData(w, r)
-		case "/ws/logs":
-			panelHandler.Logs(w, r)
-		case "/add":
-			panelHandler.AddRule(w, r)
-		case "/remove":
-			panelHandler.RemoveRule(w, r)
-		case "/styles.css":
-			panelHandler.ServeStyles(w, r)
-		default:
-			proxyHandler.ServeHTTP(w, r)
-		}
-	})
+	// Autocert for automatic HTTPS certificates
+	certManager := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: store.HostPolicy, // Use the rule store to validate hosts
+		Cache:      autocert.DirCache("certs"),
+	}
 
-	// Start the server
-	log.Println("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal(err)
+	// HTTPS server
+	server := &http.Server{
+		Addr:    ":443",
+		Handler: proxyHandler,
+		TLSConfig: &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+		},
+	}
+
+	// HTTP server (for ACME challenge and redirecting to HTTPS)
+	go func() {
+		log.Println("Starting HTTP server on :80")
+		if err := http.ListenAndServe(":80", certManager.HTTPHandler(nil)); err != nil {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	// Start HTTPS server
+	log.Println("Starting HTTPS server on :443")
+	if err := server.ListenAndServeTLS("", ""); err != nil {
+		log.Fatalf("HTTPS server error: %v", err)
 	}
 }
