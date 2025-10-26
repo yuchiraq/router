@@ -3,7 +3,7 @@
 
 {{define "head"}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/color-hash@2.0.2/dist/color-hash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/color-hash@1.0.4/dist/color-hash.min.js"></script> {{/* Use browser-compatible version */}}
 {{end}}
 
 {{define "content"}}
@@ -70,7 +70,7 @@
         data: {
             labels: [],
             datasets: [{
-                label: 'Memory Usage (% Rhett)',
+                label: 'Memory Usage (%)',
                 data: [],
                 borderColor: '#0A84FF',
                 backgroundColor: 'rgba(10, 132, 255, 0.2)',
@@ -131,6 +131,11 @@
                             });
                         }
                     });
+                    // Remove old datasets
+                    requestsChart.data.datasets = requestsChart.data.datasets.filter(d => 
+                        data.requests.datasets.some(nd => nd.label === d.label)
+                    );
+
                     requestsChart.update();
                 }
             })
