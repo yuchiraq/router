@@ -104,8 +104,6 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 // Stats serves the statistics page
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-        // We pass hosts to the template, though it's not currently used in stats.html
-        // The main data is fetched via JS
         _, hosts := h.stats.GetRequestData()
         data := map[string]interface{}{
             "Hosts": hosts, 
@@ -147,11 +145,6 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 		h.store.Remove(host)
 		http.Redirect(w, r, "/", http.StatusFound)
 	}).ServeHTTP(w, r)
-}
-
-// ServeStyles serves the CSS file
-func (h *Handler) ServeStyles(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "internal/panel/templates/styles.css")
 }
 
 // StatsData provides stats data as JSON

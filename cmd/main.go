@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -44,6 +45,11 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
+        
+        // Create a file server for the static assets
+        fs := http.FileServer(http.Dir("internal/panel/static"))
+        panelMux.Handle("/static/", http.StripPrefix("/static/", fs))
+
 		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
 		panelMux.HandleFunc("/", panelHandler.Index)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
@@ -51,7 +57,7 @@ func main() {
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-		panelMux.HandleFunc("/styles.css", panelHandler.ServeStyles)
+
 		log.Println("Starting admin panel on :8162")
 		if err := http.ListenAndServe(":8162", panelMux); err != nil {
 			log.Fatalf("Failed to start admin panel: %v", err)
