@@ -15,7 +15,7 @@ type Handler struct {
 }
 
 func NewHandler(store *storage.RuleStore, username, password string) *Handler {
-	log.Println("Parsing templates...
+	log.Println("Parsing templates...")
 	tmpl, err := template.ParseGlob("internal/panel/templates/*.html")
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
@@ -109,6 +109,7 @@ func (h *Handler) removeRuleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	host := r.FormValue("host")
 	if host == "" {
+		log.Printf("Host is required")
 		http.Error(w, "Host is required", http.StatusBadRequest)
 		return
 	}
