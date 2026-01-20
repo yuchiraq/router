@@ -45,13 +45,17 @@ func main() {
 	go func() {
 		panelMux := http.NewServeMux()
 		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
+		
+		// Serve static files
+		staticFS := http.FileServer(http.Dir("internal/panel/static"))
+    	panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
+
 		panelMux.HandleFunc("/", panelHandler.Index)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-		panelMux.HandleFunc("/styles.css", panelHandler.ServeStyles)
 		log.Println("Starting admin panel on :8162")
 		if err := http.ListenAndServe(":8162", panelMux); err != nil {
 			log.Fatalf("Failed to start admin panel: %v", err)
@@ -89,5 +93,5 @@ func main() {
 	log.Println("Starting HTTPS server on :443")
 	if err := server.ListenAndServeTLS("", ""); err != nil {
 		log.Fatalf("HTTPS server error: %v", err)
-		}
+	}
 }
