@@ -33,14 +33,9 @@ type Handler struct {
 func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
 	templates := make(map[string]*template.Template)
 
-	// Parse templates, associating the layout with each page correctly
+	// Parse templates
 	templates["index"] = template.Must(template.ParseFiles(
-		"internal/panel/templates/layout.html",
 		"internal/panel/templates/index.html",
-	))
-	templates["stats"] = template.Must(template.ParseFiles(
-		"internal/panel/templates/layout.html",
-		"internal/panel/templates/stats.html",
 	))
 
 	return &Handler{
@@ -81,8 +76,8 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 
 	// This structure is passed to the template
 	templateData := map[string]interface{}{
-		"Page": name, // Used to set the 'active' class on nav links
-		"Data": data, // The specific data for the page (e.g., rules or stats)
+		"Page": name,
+		"Data": data,
 	}
 
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
@@ -101,10 +96,10 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	}).ServeHTTP(w, r)
 }
 
-// Stats serves the statistics page
+// Stats serves the statistics page by sending the static HTML file
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		h.render(w, r, "stats", nil)
+		http.ServeFile(w, r, "internal/panel/templates/stats.html")
 	}).ServeHTTP(w, r)
 }
 
