@@ -143,13 +143,13 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		requestData := h.stats.GetRequestData()
-		memoryLabels, _, memoryPercents := h.stats.GetMemoryData()
+		memoryLabels, memoryValues, _ := h.stats.GetMemoryData()
 
 		data := map[string]interface{}{
 			"requests": requestData,
 			"memory":   map[string]interface{}{
 				"labels":   memoryLabels,
-				"percents": memoryPercents,
+				"values": memoryValues,
 			},
 		}
 

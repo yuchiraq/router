@@ -28,7 +28,7 @@
         </div>
 
         <div class="card">
-            <div class="card-header">Memory Usage (%)</div>
+            <div class="card-header">Memory Usage (MB)</div>
             <div class="card-body">
                 <canvas id="memory-chart"></canvas>
             </div>
@@ -62,6 +62,9 @@
                 plugins: {
                     legend: {
                         labels: { color: '#f0f0f5' }
+                    },
+                    tooltip: {
+                        callbacks: {}
                     }
                 },
                 interaction: {
@@ -72,28 +75,49 @@
             };
 
             // --- Memory Chart --- //
+            const memoryChartOptions = {
+                ...chartOptions,
+                plugins: {
+                    ...chartOptions.plugins,
+                    tooltip: {
+                        ...chartOptions.plugins.tooltip,
+                        callbacks: {
+                            ...chartOptions.plugins.tooltip.callbacks,
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y + ' MB';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    ...chartOptions.scales,
+                    y: {
+                        ...chartOptions.scales.y,
+                        // We no longer need a hardcoded max of 100
+                    }
+                }
+            };
+
             const memoryChart = new Chart(document.getElementById('memory-chart').getContext('2d'), {
                 type: 'line',
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Memory Usage (%)',
+                        label: 'Memory Usage (MB)',
                         data: [],
                         borderColor: '#0A84FF',
                         backgroundColor: 'rgba(10, 132, 255, 0.2)',
                         fill: true,
                     }]
                 },
-                options: {
-                    ...chartOptions,
-                    scales: {
-                        ...chartOptions.scales,
-                        y: {
-                            ...chartOptions.scales.y,
-                            max: 100,
-                        }
-                    }
-                }
+                options: memoryChartOptions,
             });
 
             // --- Requests Chart --- //
@@ -115,7 +139,7 @@
                     .then(data => {
                         // Update Memory Chart
                         memoryChart.data.labels = data.memory.labels;
-                        memoryChart.data.datasets[0].data = data.memory.percents;
+                        memoryChart.data.datasets[0].data = data.memory.values; // Use values (MB) now
                         memoryChart.update();
 
                         // Update Requests Chart
