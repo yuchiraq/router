@@ -69,7 +69,7 @@ func (s *Stats) RecordMemory() {
 }
 
 // GetRequestData returns request data grouped by host for charting
-func (s *Stats) GetRequestData() (map[string]interface{}, []string) {
+func (s *Stats) GetRequestData() (map[string]interface{}) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -111,7 +111,7 @@ func (s *Stats) GetRequestData() (map[string]interface{}, []string) {
 	}
 	chartData["datasets"] = chartDatasets
 
-	return chartData, hosts
+	return chartData
 }
 
 // GetMemoryData returns memory data for charting (absolute and percentage)

@@ -72,7 +72,7 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // render executes the correct template, ensuring page data is passed
-func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data interface{}) {
+func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, data interface{}) {
 	tmpl, ok := h.templates[name]
 	if !ok {
 		http.Error(w, "Template not found", http.StatusInternalServerError)
@@ -104,11 +104,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 // Stats serves the statistics page
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-        _, hosts := h.stats.GetRequestData()
-        data := map[string]interface{}{
-            "Hosts": hosts, 
-        }
-		h.render(w, r, "stats", data)
+		h.render(w, r, "stats", nil)
 	}).ServeHTTP(w, r)
 }
 
@@ -150,7 +146,7 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 // StatsData provides stats data as JSON
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		requestData, _ := h.stats.GetRequestData()
+		requestData := h.stats.GetRequestData()
 		memoryLabels, _, memoryPercents := h.stats.GetMemoryData()
 
 		data := map[string]interface{}{
