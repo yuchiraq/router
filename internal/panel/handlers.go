@@ -35,6 +35,7 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 
 	// Parse templates
 	templates["index"] = template.Must(template.ParseFiles(
+		"internal/panel/templates/layout.html",
 		"internal/panel/templates/index.html",
 	))
 
@@ -99,7 +100,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 // Stats serves the statistics page by sending the static HTML file
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "internal/panel/templates/stats.html")
+		http.ServeFile(w, r, "internal/panel/static/stats.html")
 	}).ServeHTTP(w, r)
 }
 
