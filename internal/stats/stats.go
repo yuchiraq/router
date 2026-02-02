@@ -2,7 +2,6 @@
 package stats
 
 import (
-	"runtime"
 	"sync"
 	"time"
 
