@@ -38,9 +38,6 @@ type Stats struct {
 
 // New creates a new Stats instance
 func New() *Stats {
-	// Initialize CPU stats to avoid 0 value on first call
-	cpu.Percent(0, false)
-
 	return &Stats{
 		requests: make([]Request, 0, 10000), // Pre-allocate for performance
 		memory:   make([]Memory, 0, 1000),   // Pre-allocate
@@ -78,8 +75,8 @@ func (s *Stats) RecordMemory() {
 
 // RecordCPU records the current CPU usage
 func (s *Stats) RecordCPU() {
-	// Get system CPU stats
-	percent, err := cpu.Percent(0, false)
+	// Get system CPU stats over 1 second
+	percent, err := cpu.Percent(time.Second, false)
 	if err != nil || len(percent) == 0 {
 		return
 	}
