@@ -4,7 +4,7 @@
     <h1>Dashboard</h1>
     <form action="/toggle_maintenance" method="post" class="maintenance-form">
         <label for="maintenance-mode">Maintenance Mode:</label>
-        <input type="checkbox" id="maintenance-mode" name="maintenance" onchange="this.form.submit()" {{if .Data.MaintenanceMode}}checked{{end}}>
+        <input type="checkbox" id="maintenance-mode" name="maintenance" onchange="this.form.submit()" {{if .MaintenanceMode}}checked{{end}}>
     </form>
 </div>
 
@@ -32,7 +32,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {{range $host, $target := .Data.Rules}}
+                    {{range $host, $target := .Rules}}
                     <tr>
                         <td>{{$host}}</td>
                         <td>{{$target}}</td>
