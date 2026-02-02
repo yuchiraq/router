@@ -28,18 +28,20 @@ type RuleStore struct {
 
 // NewRuleStore creates a new RuleStore
 func NewRuleStore(storage *Storage) *RuleStore {
+	rs := &RuleStore{
+		rules:   make(map[string]*Rule), // Initialize the map here!
+		storage: storage,
+	}
+
 	rules, maintenanceMode, err := storage.Load()
 	if err != nil {
 		log.Printf("Error loading rules: %v", err)
-		// If loading fails, initialize with an empty map to prevent panics.
-		rules = make(map[string]*Rule)
+		// On error, we will start with an empty rule set and maintenance mode off.
+	} else {
+		rs.rules = rules
+		rs.MaintenanceMode = maintenanceMode
 	}
 
-	rs := &RuleStore{
-		rules:   rules,
-		storage: storage,
-		MaintenanceMode: maintenanceMode,
-	}
 	go rs.startHealthCheck()
 	return rs
 }
