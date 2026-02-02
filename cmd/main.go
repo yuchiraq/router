@@ -30,19 +30,15 @@ func main() {
 	broadcaster := logstream.New()
 	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
 
-	// Start memory recording
+	// Start system stats recording
 	go func() {
 		for {
+			// Record stats in the same loop to keep them in sync
 			stats.RecordMemory()
-			time.Sleep(3 * time.Second)
-		}
-	}()
+			stats.RecordCPU() // This will block for 1 second
 
-	// Start CPU recording
-	go func() {
-		for {
-			stats.RecordCPU()
-			time.Sleep(1 * time.Second) // Record CPU stats more frequently
+			// Sleep for 2 more seconds to create a 3-second interval
+			time.Sleep(2 * time.Second)
 		}
 	}()
 

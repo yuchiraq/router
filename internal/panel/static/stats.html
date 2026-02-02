@@ -168,7 +168,7 @@
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                         ticks: { color: '#a0a0a5' }
                     },
-                    y: { // Percentage axis
+                    "y-cpu": { // Unique ID for CPU y-axis
                         type: 'linear',
                         display: true,
                         position: 'left',
@@ -195,7 +195,7 @@
                         borderColor: '#FF9F0A',
                         backgroundColor: 'rgba(255, 159, 10, 0.2)',
                         fill: true,
-                        yAxisID: 'y',
+                        yAxisID: 'y-cpu', // Match the unique ID
                     }]
                 },
                 options: cpuChartOptions,
