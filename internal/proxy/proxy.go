@@ -2,6 +2,7 @@
 package proxy
 
 import (
+	"html/template"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -12,17 +13,29 @@ import (
 
 // Proxy is a reverse proxy that uses a RuleStore to determine the target.
 type Proxy struct {
-	store *storage.RuleStore
-	stats *stats.Stats
+	store             *storage.RuleStore
+	stats             *stats.Stats
+	maintenanceTmpl   *template.Template
 }
 
 // NewProxy creates a new Proxy.
 func NewProxy(store *storage.RuleStore, stats *stats.Stats) *Proxy {
-	return &Proxy{store: store, stats: stats}
+	maintenanceTmpl := template.Must(template.ParseFiles("internal/panel/templates/maintenance.html"))
+	return &Proxy{
+		store: store,
+		stats: stats,
+		maintenanceTmpl: maintenanceTmpl,
+	}
 }
 
 // ServeHTTP handles the proxying of requests.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p.store.MaintenanceMode {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		p.maintenanceTmpl.Execute(w, nil)
+		return
+	}
+
 	target, ok := p.store.Get(r.Host)
 	if !ok {
 		http.Error(w, "Not Found", http.StatusNotFound)

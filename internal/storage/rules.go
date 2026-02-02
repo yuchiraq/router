@@ -23,11 +23,12 @@ type RuleStore struct {
 	mu      sync.RWMutex
 	rules   map[string]*Rule
 	storage *Storage
+	MaintenanceMode bool `json:"maintenanceMode"`
 }
 
 // NewRuleStore creates a new RuleStore
 func NewRuleStore(storage *Storage) *RuleStore {
-	rules, err := storage.Load()
+	rules, maintenanceMode, err := storage.Load()
 	if err != nil {
 		log.Printf("Error loading rules: %v", err)
 	}
@@ -35,6 +36,7 @@ func NewRuleStore(storage *Storage) *RuleStore {
 	rs := &RuleStore{
 		rules:   rules,
 		storage: storage,
+		MaintenanceMode: maintenanceMode,
 	}
 	go rs.startHealthCheck()
 	return rs
@@ -46,7 +48,7 @@ func (s *RuleStore) Add(host, target string) {
 	defer s.mu.Unlock()
 	// The Host field is primarily for template display and is populated by the All() method.
 	s.rules[host] = &Rule{Target: target}
-	s.storage.Save(s.rules)
+	s.storage.Save(s.rules, s.MaintenanceMode)
 }
 
 // Remove removes a rule
@@ -54,7 +56,7 @@ func (s *RuleStore) Remove(host string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.rules, host)
-	s.storage.Save(s.rules)
+	s.storage.Save(s.rules, s.MaintenanceMode)
 }
 
 // Get retrieves a rule
@@ -91,6 +93,15 @@ func (s *RuleStore) HostPolicy(ctx context.Context, host string) error {
 	}
 	return fmt.Errorf("host %q not allowed", host)
 }
+
+// SetMaintenanceMode sets the maintenance mode status
+func (s *RuleStore) SetMaintenanceMode(enabled bool) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    s.MaintenanceMode = enabled
+    s.storage.Save(s.rules, s.MaintenanceMode) // Save the updated state
+}
+
 
 // startHealthCheck periodically checks the health of the services
 func (s *RuleStore) startHealthCheck() {

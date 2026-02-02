@@ -38,6 +38,9 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		"internal/panel/templates/layout.html",
 		"internal/panel/templates/index.html",
 	))
+	templates["maintenance"] = template.Must(template.ParseFiles(
+		"internal/panel/templates/maintenance.html",
+	))
 
 	return &Handler{
 		store:       store,
@@ -90,8 +93,16 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 // Index serves the main page with the list of rules
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			maintenance := r.FormValue("maintenance") == "on"
+			h.store.SetMaintenanceMode(maintenance)
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
 		data := map[string]interface{}{
-			"Rules": h.store.All(),
+			"Rules":           h.store.All(),
+			"MaintenanceMode": h.store.MaintenanceMode,
 		}
 		h.render(w, r, "index", data)
 	}).ServeHTTP(w, r)
