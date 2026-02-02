@@ -31,6 +31,8 @@ func NewRuleStore(storage *Storage) *RuleStore {
 	rules, maintenanceMode, err := storage.Load()
 	if err != nil {
 		log.Printf("Error loading rules: %v", err)
+		// If loading fails, initialize with an empty map to prevent panics.
+		rules = make(map[string]*Rule)
 	}
 
 	rs := &RuleStore{
