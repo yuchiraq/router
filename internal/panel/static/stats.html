@@ -81,7 +81,7 @@
                 tension: 0.4,
             };
 
-            // --- Memory Chart --- //
+            // --- Memory Chart (Working Example) ---
             const memoryChartOptions = {
                 ...chartOptions,
                 plugins: {
@@ -92,11 +92,9 @@
                             ...chartOptions.plugins.tooltip.callbacks,
                             label: function(context) {
                                 let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
+                                if (label) { label += ': '; }
                                 if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toFixed(2) + ' %'; // Percentage
+                                    label += context.parsed.y.toFixed(2) + ' %';
                                 }
                                 return label;
                             }
@@ -108,7 +106,7 @@
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                         ticks: { color: '#a0a0a5' }
                     },
-                    y1: { // Percentage axis
+                    y1: {
                         type: 'linear',
                         display: true,
                         position: 'left',
@@ -116,11 +114,7 @@
                         ticks: { color: '#32D74B' },
                         beginAtZero: true,
                         suggestedMax: 100,
-                        title: {
-                            display: true,
-                            text: '%',
-                            color: '#32D74B'
-                        }
+                        title: { display: true, text: '%', color: '#32D74B' }
                     }
                 }
             };
@@ -130,7 +124,7 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Used (%)',
+                        label: 'Used (% villages)',
                         data: [],
                         borderColor: '#32D74B',
                         backgroundColor: 'rgba(50, 215, 75, 0.2)',
@@ -141,7 +135,7 @@
                 options: memoryChartOptions,
             });
 
-            // --- CPU Chart --- //
+            // --- CPU Chart (Fixed) ---
             const cpuChartOptions = {
                 ...chartOptions,
                 plugins: {
@@ -152,11 +146,9 @@
                             ...chartOptions.plugins.tooltip.callbacks,
                             label: function(context) {
                                 let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
+                                if (label) { label += ': '; }
                                 if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toFixed(2) + ' %'; // Percentage
+                                    label += context.parsed.y.toFixed(2) + ' %';
                                 }
                                 return label;
                             }
@@ -168,7 +160,7 @@
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                         ticks: { color: '#a0a0a5' }
                     },
-                    "y-cpu": { // Unique ID for CPU y-axis
+                    y2: { // Using a new ID 'y2' to avoid conflicts
                         type: 'linear',
                         display: true,
                         position: 'left',
@@ -176,11 +168,7 @@
                         ticks: { color: '#FF9F0A' },
                         beginAtZero: true,
                         suggestedMax: 100,
-                        title: {
-                            display: true,
-                            text: '%',
-                            color: '#FF9F0A'
-                        }
+                        title: { display: true, text: '%', color: '#FF9F0A' }
                     }
                 }
             };
@@ -190,18 +178,18 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Used (%)',
+                        label: 'Used (% villages)',
                         data: [],
                         borderColor: '#FF9F0A',
                         backgroundColor: 'rgba(255, 159, 10, 0.2)',
                         fill: true,
-                        yAxisID: 'y-cpu', // Match the unique ID
+                        yAxisID: 'y2', // Matching the new ID 'y2'
                     }]
                 },
                 options: cpuChartOptions,
             });
 
-            // --- Requests Chart --- //
+            // --- Requests Chart ---
             const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
                 type: 'line',
                 data: { labels: [], datasets: [] },
@@ -247,7 +235,6 @@
                                     });
                                 }
                             });
-                            // Remove old datasets
                             requestsChart.data.datasets = requestsChart.data.datasets.filter(d => 
                                 data.requests.datasets.some(nd => nd.label === d.label)
                             );
