@@ -37,8 +37,8 @@ func main() {
 	}()
 
 	// Set up handlers
-	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, cfg.Target)
 	panelHandler := panel.NewHandler(store, cfg.Username, cfg.Password, statistics, broadcaster)
+	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, cfg.Target, panelHandler.Maintenance)
 
 	// Set up routes
 	mux := http.NewServeMux()
@@ -48,6 +48,7 @@ func main() {
 	mux.HandleFunc("/remove", panelHandler.RemoveRule)
 	mux.HandleFunc("/stats/data", panelHandler.StatsData)
 	mux.HandleFunc("/ws", panelHandler.Logs)
+	mux.HandleFunc("/toggle_maintenance", panelHandler.ToggleMaintenance) // Add this route
 
 	// Serve static files
 	fs := http.FileServer(http.Dir("internal/panel/static"))

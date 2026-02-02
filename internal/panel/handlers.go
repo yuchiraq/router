@@ -38,6 +38,9 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		"internal/panel/templates/layout.html",
 		"internal/panel/templates/index.html",
 	))
+	templates["maintenance"] = template.Must(template.ParseFiles(
+		"internal/panel/templates/maintenance.html",
+	))
 
 	return &Handler{
 		store:       store,
@@ -92,6 +95,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{
 			"Rules": h.store.All(),
+			"MaintenanceMode": h.store.IsMaintenanceMode(),
 		}
 		h.render(w, r, "index", data)
 	}).ServeHTTP(w, r)
@@ -186,4 +190,30 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}).ServeHTTP(w, r)
+}
+
+// ToggleMaintenance toggles the maintenance mode
+func (h *Handler) ToggleMaintenance(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		currentMode := h.store.IsMaintenanceMode()
+		h.store.SetMaintenanceMode(!currentMode)
+		http.Redirect(w, r, "/", http.StatusFound)
+	}).ServeHTTP(w, r)
+}
+
+// Maintenance serves the maintenance page
+func (h *Handler) Maintenance(w http.ResponseWriter, r *http.Request) {
+	tmpl, ok := h.templates["maintenance"]
+	if !ok {
+		http.Error(w, "Template not found", http.StatusInternalServerError)
+		return
+	}
+	if err := tmpl.Execute(w, nil); err != nil {
+		log.Printf("Error executing maintenance template: %v", err)
+		http.Error(w, "Error rendering page", http.StatusInternalServerError)
+	}
 }
