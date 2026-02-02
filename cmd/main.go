@@ -2,102 +2,63 @@
 package main
 
 import (
-	"crypto/tls"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
+	"router/internal/config"
 	"router/internal/logstream"
 	"router/internal/panel"
 	"router/internal/proxy"
 	"router/internal/stats"
 	"router/internal/storage"
-
-	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
-	// Initialize storage
-	fileStorage := storage.NewStorage("rules.json")
-	store := storage.NewRuleStore(fileStorage)
-
-	// Initialize stats
-	stats := stats.New()
-
-	// Initialize log broadcaster
-	broadcaster := logstream.New()
-	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
-
-	// Start system stats recording
-	go func() {
-		for {
-			// Record stats in the same loop to keep them in sync
-			stats.RecordMemory()
-			stats.RecordCPU() // This will block for 1 second
-
-			// Sleep for 2 more seconds to create a 3-second interval
-			time.Sleep(2 * time.Second)
-		}
-	}()
-
-	// Get admin credentials from environment variables
-	adminUser := os.Getenv("ADMIN_USER")
-	adminPass := os.Getenv("ADMIN_PASS")
-
-	// --- Admin Panel (Port 8162) ---
-	go func() {
-		panelMux := http.NewServeMux()
-
-		// Create a file server for the static assets
-		fs := http.FileServer(http.Dir("internal/panel/static"))
-		panelMux.Handle("/static/", http.StripPrefix("/static/", fs))
-
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
-		panelMux.HandleFunc("/", panelHandler.Index)
-		panelMux.HandleFunc("/stats", panelHandler.Stats)
-		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
-		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
-		panelMux.HandleFunc("/add", panelHandler.AddRule)
-		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-
-		log.Println("Starting admin panel on :8162")
-		if err := http.ListenAndServe(":8162", panelMux); err != nil {
-			log.Fatalf("Failed to start admin panel: %v", err)
-		}
-	}()
-
-	// --- Proxy (Ports 80 & 443) ---
-	proxyHandler := proxy.NewProxy(store, stats)
-
-	// Autocert for automatic HTTPS certificates
-	certManager := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: store.HostPolicy, // Use the rule store to validate hosts
-		Cache:      autocert.DirCache("certs"),
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// HTTPS server
-	server := &http.Server{
-		Addr:    ":443",
-		Handler: proxyHandler,
-		TLSConfig: &tls.Config{
-			GetCertificate: certManager.GetCertificate,
-		},
-	}
+	// Initialize storage, stats, and broadcaster
+	store := storage.NewRuleStore(cfg.Rules)
+	statistics := stats.New()
+	broadcaster := logstream.NewBroadcaster()
 
-	// HTTP server (for ACME challenge and redirecting to HTTPS)
+	// Start background tasks
 	go func() {
-		log.Println("Starting HTTP server on :80")
-		if err := http.ListenAndServe(":80", certManager.HTTPHandler(nil)); err != nil {
-			log.Fatalf("HTTP server error: %v", err)
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			statistics.RecordMemory()
+			statistics.RecordCPU()
 		}
 	}()
 
-	// Start HTTPS server
-	log.Println("Starting HTTPS server on :443")
-	if err := server.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("HTTPS server error: %v", err)
+	// Set up handlers
+	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, cfg.Target)
+	panelHandler := panel.NewHandler(store, cfg.Username, cfg.Password, statistics, broadcaster)
+
+	// Set up routes
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", panelHandler.Index)
+	mux.HandleFunc("/stats", panelHandler.Stats)
+	mux.HandleFunc("/add", panelHandler.AddRule)
+	mux.HandleFunc("/remove", panelHandler.RemoveRule)
+	mux.HandleFunc("/stats/data", panelHandler.StatsData)
+	mux.HandleFunc("/ws", panelHandler.Logs)
+
+	// Serve static files
+	fs := http.FileServer(http.Dir("internal/panel/static"))
+	mux.Handle("/static/", http.StripPrefix("/static/", fs))
+
+	// Main proxy handler
+	mux.HandleFunc("/proxy/", proxyHandler.ServeHTTP)
+
+	// Start server
+	log.Printf("Starting server on :%s", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
+		log.Fatalf("Server failed: %v", err)
 	}
 }
