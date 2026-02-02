@@ -89,11 +89,7 @@
                                     label += ': ';
                                 }
                                 if (context.parsed.y !== null) {
-                                    if (context.dataset.yAxisID === 'y1') {
-                                        label += context.parsed.y.toFixed(2) + ' %'; // Percentage
-                                    } else {
-                                        label += context.parsed.y + ' MB'; // Absolute
-                                    }
+                                    label += context.parsed.y.toFixed(2) + ' %'; // Percentage
                                 }
                                 return label;
                             }
@@ -105,24 +101,11 @@
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                         ticks: { color: '#a0a0a5' }
                     },
-                    y: { // MB axis
+                    y1: { // Percentage axis
                         type: 'linear',
                         display: true,
                         position: 'left',
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#0A84FF' },
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'MB',
-                            color: '#0A84FF'
-                        }
-                    },
-                    y1: { // Percentage axis
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        grid: { drawOnChartArea: false }, // only draw grid for first Y axis
                         ticks: { color: '#32D74B' },
                         beginAtZero: true,
                         suggestedMax: 100,
@@ -140,13 +123,6 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Used (MB)',
-                        data: [],
-                        borderColor: '#0A84FF',
-                        backgroundColor: 'rgba(10, 132, 255, 0.2)',
-                        fill: true,
-                        yAxisID: 'y',
-                    }, {
                         label: 'Used (%)',
                         data: [],
                         borderColor: '#32D74B',
@@ -177,8 +153,7 @@
                     .then(data => {
                         // Update Memory Chart
                         memoryChart.data.labels = data.memory.labels;
-                        memoryChart.data.datasets[0].data = data.memory.values;
-                        memoryChart.data.datasets[1].data = data.memory.percents;
+                        memoryChart.data.datasets[0].data = data.memory.percents;
                         memoryChart.update();
 
                         // Update Requests Chart
