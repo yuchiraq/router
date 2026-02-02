@@ -70,7 +70,7 @@ func (s *RuleStore) SetMaintenanceMode(enabled bool) {
 }
 
 // IsMaintenanceMode returns the current maintenance mode status
-func (s.RuleStore) IsMaintenanceMode() bool {
+func (s *RuleStore) IsMaintenanceMode() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.maintenanceMode

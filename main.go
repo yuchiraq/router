@@ -19,11 +19,10 @@ import (
 
 func main() {
 	// Initialize storage
-	fileStorage := storage.NewStorage("rules.json")
-	store := storage.NewRuleStore(fileStorage)
+	store := storage.NewRuleStore(nil)
 
 	// Initialize stats
-	stats := stats.New()
+	statistics := stats.New()
 
 	// Initialize log broadcaster
 	broadcaster := logstream.New()
@@ -32,7 +31,7 @@ func main() {
 	// Start memory recording
 	go func() {
 		for {
-			stats.RecordMemory()
+			statistics.RecordMemory()
 			time.Sleep(5 * time.Second)
 		}
 	}()
@@ -44,11 +43,11 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
-		
+		panelHandler := panel.NewHandler(store, adminUser, adminPass, statistics, broadcaster)
+
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
-    	panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
+		panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
 
 		panelMux.HandleFunc("/", panelHandler.Index)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
@@ -63,13 +62,13 @@ func main() {
 	}()
 
 	// --- Proxy (Ports 80 & 443) ---
-	proxyHandler := proxy.NewProxy(store, stats)
+	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, "", nil)
 
 	// Autocert for automatic HTTPS certificates
 	certManager := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: store.HostPolicy, // Use the rule store to validate hosts
-		Cache:      autocert.DirCache("certs"),
+		Prompt: autocert.AcceptTOS,
+		// HostPolicy: store.HostPolicy, // Use the rule store to validate hosts
+		Cache: autocert.DirCache("certs"),
 	}
 
 	// HTTPS server
