@@ -35,6 +35,13 @@
         </div>
 
         <div class="card">
+            <div class="card-header">System CPU Usage</div>
+            <div class="card-body">
+                <canvas id="cpu-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-header">Requests Per Hour</div>
             <div class="card-body">
                 <canvas id="requests-chart"></canvas>
@@ -134,6 +141,66 @@
                 options: memoryChartOptions,
             });
 
+            // --- CPU Chart --- //
+            const cpuChartOptions = {
+                ...chartOptions,
+                plugins: {
+                    ...chartOptions.plugins,
+                    tooltip: {
+                        ...chartOptions.plugins.tooltip,
+                        callbacks: {
+                            ...chartOptions.plugins.tooltip.callbacks,
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toFixed(2) + ' %'; // Percentage
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#a0a0a5' }
+                    },
+                    y: { // Percentage axis
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#FF9F0A' },
+                        beginAtZero: true,
+                        suggestedMax: 100,
+                        title: {
+                            display: true,
+                            text: '%',
+                            color: '#FF9F0A'
+                        }
+                    }
+                }
+            };
+
+            const cpuChart = new Chart(document.getElementById('cpu-chart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Used (%)',
+                        data: [],
+                        borderColor: '#FF9F0A',
+                        backgroundColor: 'rgba(255, 159, 10, 0.2)',
+                        fill: true,
+                        yAxisID: 'y',
+                    }]
+                },
+                options: cpuChartOptions,
+            });
+
             // --- Requests Chart --- //
             const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
                 type: 'line',
@@ -155,6 +222,13 @@
                         memoryChart.data.labels = data.memory.labels;
                         memoryChart.data.datasets[0].data = data.memory.percents;
                         memoryChart.update();
+
+                        // Update CPU Chart
+                        if (data.cpu) {
+                            cpuChart.data.labels = data.cpu.labels;
+                            cpuChart.data.datasets[0].data = data.cpu.percents;
+                            cpuChart.update();
+                        }
 
                         // Update Requests Chart
                         if (data.requests && data.requests.datasets) {

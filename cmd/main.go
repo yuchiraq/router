@@ -30,11 +30,12 @@ func main() {
 	broadcaster := logstream.New()
 	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
 
-	// Start memory recording
+	// Start system stats recording
 	go func() {
 		for {
 			stats.RecordMemory()
-			time.Sleep(5 * time.Second)
+			stats.RecordCPU()
+			time.Sleep(3 * time.Second)
 		}
 	}()
 
@@ -45,10 +46,10 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
-        
-        // Create a file server for the static assets
-        fs := http.FileServer(http.Dir("internal/panel/static"))
-        panelMux.Handle("/static/", http.StripPrefix("/static/", fs))
+
+		// Create a file server for the static assets
+		fs := http.FileServer(http.Dir("internal/panel/static"))
+		panelMux.Handle("/static/", http.StripPrefix("/static/", fs))
 
 		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
 		panelMux.HandleFunc("/", panelHandler.Index)

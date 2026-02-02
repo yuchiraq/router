@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
 )
 
@@ -21,18 +22,29 @@ type Memory struct {
 	Percent float64 // Used memory in percentage
 }
 
+// CPU represents a single CPU usage entry
+type CPU struct {
+	Time    time.Time
+	Percent float64 // Used CPU in percentage
+}
+
 // Stats holds the collected statistics
 type Stats struct {
 	mu       sync.RWMutex
 	requests []Request
 	memory   []Memory
+	cpu      []CPU
 }
 
 // New creates a new Stats instance
 func New() *Stats {
+	// Initialize CPU stats to avoid 0 value on first call
+	cpu.Percent(0, false)
+
 	return &Stats{
 		requests: make([]Request, 0, 10000), // Pre-allocate for performance
 		memory:   make([]Memory, 0, 1000),   // Pre-allocate
+		cpu:      make([]CPU, 0, 1000),      // Pre-allocate
 	}
 }
 
@@ -51,21 +63,43 @@ func (s *Stats) RecordMemory() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-    // Store total system memory usage
+	// Store total system memory usage
 	s.memory = append(s.memory, Memory{
 		Time:    time.Now(),
 		Used:    v.Used / 1024 / 1024, // Total system memory used in MB
 		Percent: v.UsedPercent,          // Total system memory used percentage
 	})
 
-    // Optional: Keep memory slice from growing indefinitely
-    if len(s.memory) > 1000 {
-        s.memory = s.memory[len(s.memory)-1000:]
-    }
+	// Optional: Keep memory slice from growing indefinitely
+	if len(s.memory) > 1000 {
+		s.memory = s.memory[len(s.memory)-1000:]
+	}
+}
+
+// RecordCPU records the current CPU usage
+func (s *Stats) RecordCPU() {
+	// Get system CPU stats
+	percent, err := cpu.Percent(0, false)
+	if err != nil || len(percent) == 0 {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.cpu = append(s.cpu, CPU{
+		Time:    time.Now(),
+		Percent: percent[0],
+	})
+
+	// Optional: Keep CPU slice from growing indefinitely
+	if len(s.cpu) > 1000 {
+		s.cpu = s.cpu[len(s.cpu)-1000:]
+	}
 }
 
 // GetRequestData returns request data grouped by host for charting
-func (s *Stats) GetRequestData() (map[string]interface{}) {
+func (s *Stats) GetRequestData() map[string]interface{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -78,7 +112,7 @@ func (s *Stats) GetRequestData() (map[string]interface{}) {
 		if r.Time.After(now.Add(-24 * time.Hour)) {
 			if _, ok := datasets[r.Host]; !ok {
 				datasets[r.Host] = make(map[int]int)
-                hosts = append(hosts, r.Host)
+				hosts = append(hosts, r.Host)
 			}
 			datasets[r.Host][r.Time.Hour()]++
 		}
@@ -115,9 +149,9 @@ func (s *Stats) GetMemoryData() ([]string, []uint64, []float64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-    labels := make([]string, len(s.memory))
-    values := make([]uint64, len(s.memory))
-    percents := make([]float64, len(s.memory))
+	labels := make([]string, len(s.memory))
+	values := make([]uint64, len(s.memory))
+	percents := make([]float64, len(s.memory))
 
 	for i, m := range s.memory {
 		labels[i] = m.Time.Format("15:04:05")
@@ -126,4 +160,20 @@ func (s *Stats) GetMemoryData() ([]string, []uint64, []float64) {
 	}
 
 	return labels, values, percents
+}
+
+// GetCPUData returns CPU data for charting
+func (s *Stats) GetCPUData() ([]string, []float64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	labels := make([]string, len(s.cpu))
+	percents := make([]float64, len(s.cpu))
+
+	for i, c := range s.cpu {
+		labels[i] = c.Time.Format("15:04:05")
+		percents[i] = c.Percent
+	}
+
+	return labels, percents
 }
