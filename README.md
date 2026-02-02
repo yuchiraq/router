@@ -1,57 +1,58 @@
-# Go Reverse Proxy с Админ-панелью
+# Go Reverse Proxy with Admin Panel
 
-Этот проект представляет собой веб-сервер, написанный на Go, который функционирует как обратный прокси. Он включает в себя админ-панель для управления правилами маршрутизации, просмотра статистики и потоковой передачи логов в реальном времени.
+This project is a web server written in Go that functions as a reverse proxy. It includes an admin panel for managing routing rules, viewing statistics, and streaming logs in real time.
 
-## Возможности
+## Features
 
-- **Обратный прокси:** Маршрутизирует входящие HTTP и HTTPS запросы на различные бэкенд-сервисы на основе настраиваемых правил.
-- **Админ-панель:** Веб-интерфейс для:
-  - Добавления и удаления правил маршрутизации.
-  - Просмотра статистики сервера в реальном времени (например, использование памяти, количество запросов).
-  - Потоковой передачи логов сервера через WebSockets.
-- **Автоматический HTTPS:** Использует `autocert` для автоматического получения и обновления TLS-сертификатов от Let's Encrypt.
-- **Безопасность:** Админ-панель защищена базовой аутентификацией.
+- **Reverse Proxy:** Routes incoming HTTP and HTTPS requests to various backend services based on customizable rules.
+- **Admin Panel:** A web interface for:
+  - Adding and removing routing rules.
+  - Viewing real-time server statistics (e.g., memory usage, request count).
+  - Streaming server logs via WebSockets.
+- **Automatic HTTPS:** Uses `autocert` to automatically obtain and renew TLS certificates from Let's Encrypt.
+- **Security:** The admin panel is protected by basic authentication.
 
-## Начало работы
+## Getting Started
 
-### Предварительные требования
+### Prerequisites
 
-- Go 1.21 или новее.
-- Зарегистрированное доменное имя.
+- Go 1.24.0 or newer.
+- A registered domain name.
 
-### Установка
+### Installation
 
-1. **Клонируйте репозиторий:**
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/your-username/your-repo-name.git
    cd your-repo-name
    ```
 
-2. **Установите переменные окружения:**
-   Создайте файл `.env` в корне проекта и добавьте следующее:
+2. **Set environment variables:**
+   Create a `.env` file in the project root and add the following:
    ```
-   ADMIN_USER=ваше_имя_администратора
-   ADMIN_PASS=ваш_пароль_администратора
+   ADMIN_USER=your_admin_username
+   ADMIN_PASS=your_admin_password
    ```
 
-3. **Запустите сервер:**
+3. **Run the server:**
    ```bash
    go run main.go
    ```
 
-## Использование
+## Usage
 
-- **Прокси:** Прокси-сервер работает на портах 80 (HTTP) и 443 (HTTPS).
-- **Админ-панель:** Админ-панель доступна по адресу `http://localhost:8162`.
+- **Proxy:** The proxy server runs on ports 80 (HTTP) and 443 (HTTPS).
+- **Admin Panel:** The admin panel is available at `http://localhost:8162`.
 
-## Структура проекта
+## Project Structure
 
-- `main.go`: Основная точка входа приложения.
-- `internal/`: Содержит внутренние пакеты приложения.
-  - `config/`: Настройки конфигурации.
-  - `logstream/`: Потоковая передача логов через WebSocket.
-  - `panel/`: Обработчики и шаблоны админ-панели.
-  - `proxy/`: Логика обратного прокси.
-  - `stats/`: Сбор статистики.
-  - `storage/`: Хранилище правил маршрутизации.
-- `go.mod`, `go.sum`: Файлы модулей Go.
+- `main.go`: The main entry point of the application.
+- `cmd/main.go`: An alternative main entry point.
+- `internal/`: Contains the application's internal packages.
+  - `logstream/`: Log streaming via WebSocket.
+  - `panel/`: Admin panel handlers and templates.
+  - `proxy/`: Reverse proxy logic.
+  - `stats/`: Statistics collection.
+  - `storage/`: Routing rule storage.
+- `go.mod`, `go.sum`: Go module files.
+- `GEMINI.md`: AI rules for the project.

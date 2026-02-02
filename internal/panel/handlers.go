@@ -141,23 +141,24 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 
 // StatsData provides stats data as JSON
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		requestData := h.stats.GetRequestData()
-		memoryLabels, memoryValues, _ := h.stats.GetMemoryData()
+    h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+        requestData := h.stats.GetRequestData()
+        memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 
-		data := map[string]interface{}{
-			"requests": requestData,
-			"memory":   map[string]interface{}{
-				"labels":   memoryLabels,
-				"values": memoryValues,
-			},
-		}
+        data := map[string]interface{}{
+            "requests": requestData,
+            "memory":   map[string]interface{}{
+                "labels":   memoryLabels,
+                "values":   memoryValues,
+                "percents": memoryPercents,
+            },
+        }
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(data); err != nil {
-			log.Printf("Error encoding stats data: %v", err)
-		}
-	}).ServeHTTP(w, r)
+        w.Header().Set("Content-Type", "application/json")
+        if err := json.NewEncoder(w).Encode(data); err != nil {
+            log.Printf("Error encoding stats data: %v", err)
+        }
+    }).ServeHTTP(w, r)
 }
 
 // Logs handles the websocket connection for logs

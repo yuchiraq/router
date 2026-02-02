@@ -48,18 +48,15 @@ func (s *Stats) AddRequest(host string) {
 func (s *Stats) RecordMemory() {
 	// Get system memory stats
 	v, _ := mem.VirtualMemory()
-	// Get process memory stats
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-    // Store memory usage as percentage of total system memory
+    // Store total system memory usage
 	s.memory = append(s.memory, Memory{
 		Time:    time.Now(),
-		Used:    m.Alloc / 1024 / 1024, // MB
-		Percent: float64(m.Alloc) / float64(v.Total) * 100,
+		Used:    v.Used / 1024 / 1024, // Total system memory used in MB
+		Percent: v.UsedPercent,          // Total system memory used percentage
 	})
 
     // Optional: Keep memory slice from growing indefinitely

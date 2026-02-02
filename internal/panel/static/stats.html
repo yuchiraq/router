@@ -28,7 +28,7 @@
         </div>
 
         <div class="card">
-            <div class="card-header">Memory Usage (MB)</div>
+            <div class="card-header">System Memory Usage</div>
             <div class="card-body">
                 <canvas id="memory-chart"></canvas>
             </div>
@@ -89,7 +89,11 @@
                                     label += ': ';
                                 }
                                 if (context.parsed.y !== null) {
-                                    label += context.parsed.y + ' MB';
+                                    if (context.dataset.yAxisID === 'y1') {
+                                        label += context.parsed.y.toFixed(2) + ' %'; // Percentage
+                                    } else {
+                                        label += context.parsed.y + ' MB'; // Absolute
+                                    }
                                 }
                                 return label;
                             }
@@ -97,10 +101,36 @@
                     }
                 },
                 scales: {
-                    ...chartOptions.scales,
-                    y: {
-                        ...chartOptions.scales.y,
-                        // We no longer need a hardcoded max of 100
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#a0a0a5' }
+                    },
+                    y: { // MB axis
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#0A84FF' },
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'MB',
+                            color: '#0A84FF'
+                        }
+                    },
+                    y1: { // Percentage axis
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: { drawOnChartArea: false }, // only draw grid for first Y axis
+                        ticks: { color: '#32D74B' },
+                        beginAtZero: true,
+                        suggestedMax: 100,
+                        title: {
+                            display: true,
+                            text: '%',
+                            color: '#32D74B'
+                        }
                     }
                 }
             };
@@ -110,11 +140,19 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Memory Usage (MB)',
+                        label: 'Used (MB)',
                         data: [],
                         borderColor: '#0A84FF',
                         backgroundColor: 'rgba(10, 132, 255, 0.2)',
                         fill: true,
+                        yAxisID: 'y',
+                    }, {
+                        label: 'Used (%)',
+                        data: [],
+                        borderColor: '#32D74B',
+                        backgroundColor: 'rgba(50, 215, 75, 0.2)',
+                        fill: true,
+                        yAxisID: 'y1',
                     }]
                 },
                 options: memoryChartOptions,
@@ -139,7 +177,8 @@
                     .then(data => {
                         // Update Memory Chart
                         memoryChart.data.labels = data.memory.labels;
-                        memoryChart.data.datasets[0].data = data.memory.values; // Use values (MB) now
+                        memoryChart.data.datasets[0].data = data.memory.values;
+                        memoryChart.data.datasets[1].data = data.memory.percents;
                         memoryChart.update();
 
                         // Update Requests Chart
