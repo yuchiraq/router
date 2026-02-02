@@ -106,7 +106,7 @@
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                         ticks: { color: '#a0a0a5' }
                     },
-                    y1: {
+                    y: { // Use a common 'y' axis for simplicity if scales are similar
                         type: 'linear',
                         display: true,
                         position: 'left',
@@ -124,12 +124,12 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Used (% villages)',
+                        label: 'Used (%)',
                         data: [],
                         borderColor: '#32D74B',
                         backgroundColor: 'rgba(50, 215, 75, 0.2)',
                         fill: true,
-                        yAxisID: 'y1',
+                        yAxisID: 'y',
                     }]
                 },
                 options: memoryChartOptions,
@@ -160,7 +160,7 @@
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                         ticks: { color: '#a0a0a5' }
                     },
-                    y2: { // Using a new ID 'y2' to avoid conflicts
+                    y: { // Use a common 'y' axis for simplicity
                         type: 'linear',
                         display: true,
                         position: 'left',
@@ -178,12 +178,12 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Used (% villages)',
+                        label: 'Used (%)',
                         data: [],
                         borderColor: '#FF9F0A',
                         backgroundColor: 'rgba(255, 159, 10, 0.2)',
                         fill: true,
-                        yAxisID: 'y2', // Matching the new ID 'y2'
+                        yAxisID: 'y', // Match the common 'y' axis
                     }]
                 },
                 options: cpuChartOptions,
@@ -207,12 +207,14 @@
                     })
                     .then(data => {
                         // Update Memory Chart
-                        memoryChart.data.labels = data.memory.labels;
-                        memoryChart.data.datasets[0].data = data.memory.percents;
-                        memoryChart.update();
+                        if (data.memory && data.memory.labels.length > 0) {
+                            memoryChart.data.labels = data.memory.labels;
+                            memoryChart.data.datasets[0].data = data.memory.percents;
+                            memoryChart.update();
+                        }
 
                         // Update CPU Chart
-                        if (data.cpu) {
+                        if (data.cpu && data.cpu.labels.length > 0) {
                             cpuChart.data.labels = data.cpu.labels;
                             cpuChart.data.datasets[0].data = data.cpu.percents;
                             cpuChart.update();
