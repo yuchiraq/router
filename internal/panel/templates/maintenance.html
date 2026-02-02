@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Технические работы</title>
     <style>
+        :root {
+            --bg-light: #f0f2f5;
+            --text-light: #1c1c1e;
+            --container-bg-light: rgba(255, 255, 255, 0.7);
+            --shadow-light: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+
+            --bg-dark: #1c1c1e;
+            --text-dark: #f0f2f5;
+            --container-bg-dark: rgba(44, 44, 46, 0.7);
+            --shadow-dark: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+        }
+
         body, html {
             margin: 0;
             padding: 0;
@@ -14,44 +26,40 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background: #f0f2f5;
-            color: #1c1c1e;
+            transition: background-color 0.3s, color 0.3s;
         }
 
-        .background-blur {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            z-index: -1;
+        body {
+            background-color: var(--bg-light);
+            background-image: radial-gradient(circle, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 70%);
+            color: var(--text-light);
         }
 
         .container {
             text-align: center;
             padding: 40px;
-            background: rgba(255, 255, 255, 0.7);
             border-radius: 20px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
             max-width: 500px;
             margin: 20px;
+            background: var(--container-bg-light);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            box-shadow: var(--shadow-light);
+            border: 1px solid rgba(255, 255, 255, 0.18);
         }
 
         .icon {
             font-size: 60px;
             margin-bottom: 20px;
-            animation: work 2.5s ease-in-out infinite;
+            animation: spin 4s linear infinite;
         }
 
-        @keyframes work {
-            0%, 100% {
-                transform: rotate(-3deg) translateX(0);
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
             }
-            50% {
-                transform: rotate(3deg) translateX(10px);
+            to {
+                transform: rotate(360deg);
             }
         }
 
@@ -64,14 +72,28 @@
         p {
             font-size: 18px;
             line-height: 1.6;
-            color: #3c3c3e;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: var(--bg-dark);
+                background-image: radial-gradient(circle, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 70%);
+                color: var(--text-dark);
+            }
+            .container {
+                background: var(--container-bg-dark);
+                box-shadow: var(--shadow-dark);
+                border: 1px solid rgba(0, 0, 0, 0.18);
+            }
+            p {
+                color: #a0a0a5;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="background-blur"></div>
     <div class="container">
-        <div class="icon">🚜</div>
+        <div class="icon">⚙️</div>
         <h1>Технические работы</h1>
         <p>Мы временно отключили сайт для проведения плановых работ. Пожалуйста, зайдите немного позже.</p>
         <p>Приносим извинения за неудобства.</p>
