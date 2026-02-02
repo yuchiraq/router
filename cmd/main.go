@@ -16,15 +16,12 @@ import (
 
 func main() {
 	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
+	cfg := config.New()
 
 	// Initialize storage, stats, and broadcaster
-	store := storage.NewRuleStore(cfg.Rules)
+	store := storage.NewRuleStore(nil)
 	statistics := stats.New()
-	broadcaster := logstream.NewBroadcaster()
+	broadcaster := logstream.New()
 
 	// Start background tasks
 	go func() {
@@ -38,28 +35,32 @@ func main() {
 
 	// Set up handlers
 	panelHandler := panel.NewHandler(store, cfg.Username, cfg.Password, statistics, broadcaster)
-	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, cfg.Target, panelHandler.Maintenance)
 
-	// Set up routes
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", panelHandler.Index)
-	mux.HandleFunc("/stats", panelHandler.Stats)
-	mux.HandleFunc("/add", panelHandler.AddRule)
-	mux.HandleFunc("/remove", panelHandler.RemoveRule)
-	mux.HandleFunc("/stats/data", panelHandler.StatsData)
-	mux.HandleFunc("/ws", panelHandler.Logs)
-	mux.HandleFunc("/toggle_maintenance", panelHandler.ToggleMaintenance) // Add this route
+	// Set up the proxy
+	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, "", panelHandler.Maintenance)
 
-	// Serve static files
+	// Set up routes for the admin panel
+	adminMux := http.NewServeMux()
+	adminMux.HandleFunc("/", panelHandler.Index)
+	adminMux.HandleFunc("/stats", panelHandler.Stats)
+	adminMux.HandleFunc("/add", panelHandler.AddRule)
+	adminMux.HandleFunc("/remove", panelHandler.RemoveRule)
+	adminMux.HandleFunc("/stats/data", panelHandler.StatsData)
+	adminMux.HandleFunc("/ws", panelHandler.Logs)
+	adminMux.HandleFunc("/toggle_maintenance", panelHandler.ToggleMaintenance)
+
+	// Serve static files for the admin panel
 	fs := http.FileServer(http.Dir("internal/panel/static"))
-	mux.Handle("/static/", http.StripPrefix("/static/", fs))
+	adminMux.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	// Main proxy handler
-	mux.HandleFunc("/proxy/", proxyHandler.ServeHTTP)
+	// Create a main router
+	mainMux := http.NewServeMux()
+	mainMux.Handle("/admin/", http.StripPrefix("/admin", adminMux)) // All admin routes are under /admin/
+	mainMux.HandleFunc("/", proxyHandler.ServeHTTP) // The proxy is the default handler
 
 	// Start server
-	log.Printf("Starting server on :%s", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
+	log.Printf("Starting server on :8080")
+	if err := http.ListenAndServe(":8080", mainMux); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }

@@ -14,20 +14,20 @@ import (
 
 // Proxy is a reverse proxy that forwards requests to different targets
 type Proxy struct {
-	store       *storage.RuleStore
-	stats       *stats.Stats
-	broadcaster *logstream.Broadcaster
-	defaultTarget string
+	store              *storage.RuleStore
+	stats              *stats.Stats
+	broadcaster        *logstream.Broadcaster
+	defaultTarget      string
 	maintenanceHandler http.HandlerFunc
 }
 
 // NewProxy creates a new Proxy
 func NewProxy(store *storage.RuleStore, stats *stats.Stats, broadcaster *logstream.Broadcaster, defaultTarget string, maintenanceHandler http.HandlerFunc) *Proxy {
 	return &Proxy{
-		store:       store,
-		stats:       stats,
-		broadcaster: broadcaster,
-		defaultTarget: defaultTarget,
+		store:              store,
+		stats:              stats,
+		broadcaster:        broadcaster,
+		defaultTarget:      defaultTarget,
 		maintenanceHandler: maintenanceHandler,
 	}
 }
@@ -49,7 +49,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.stats.AddRequest(host)
 
 	// Log the request
-	p.broadcaster.Broadcast([]byte(host + r.URL.Path))
+	p.broadcaster.Write([]byte(host + r.URL.Path))
 
 	// Look up the target for the host
 	target, ok := p.store.Get(host)
