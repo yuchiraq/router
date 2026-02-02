@@ -21,24 +21,19 @@ type Handler struct {
 	pass        string
 	stats       *stats.Stats
 	broadcaster *logstream.Broadcaster
-	templates   *template.Template
+	// templates   *template.Template
 	upgrader    websocket.Upgrader
 }
 
 // NewHandler creates a new Handler
 func NewHandler(store *storage.RuleStore, user, pass string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
-	templates, err := template.ParseGlob(filepath.Join("internal", "panel", "templates", "*.html"))
-	if err != nil {
-		log.Fatalf("Failed to parse templates: %v", err)
-	}
-
 	return &Handler{
 		store:       store,
 		user:        user,
 		pass:        pass,
 		stats:       stats,
 		broadcaster: broadcaster,
-		templates:   templates,
+		// templates:   templates,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -53,7 +48,14 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 		"Data": data,
 	}
 
-	if err := h.templates.ExecuteTemplate(w, "layout.html", templateData); err != nil {
+	tmpl, err := template.ParseFiles(filepath.Join("internal", "panel", "templates", "layout.html"), filepath.Join("internal", "panel", "templates", name+".html"))
+	if err != nil {
+		log.Printf("Error parsing template %s: %v", name, err)
+		http.Error(w, "Error rendering page", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.ExecuteTemplate(w, "layout.html", templateData); err != nil {
 		log.Printf("Error executing template %s: %v", name, err)
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
