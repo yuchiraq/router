@@ -16,15 +16,16 @@ import (
 
 func main() {
 	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
+	cfg := config.New()
 
 	// Initialize storage, stats, and broadcaster
-	store := storage.NewRuleStore(cfg.Rules)
+	storageSvc := storage.NewStorage("rules.json")
+	store := storage.NewRuleStore(storageSvc)
 	statistics := stats.New()
-	broadcaster := logstream.NewBroadcaster()
+	broadcaster := logstream.New()
+
+	// Set log output to the broadcaster
+	log.SetOutput(broadcaster)
 
 	// Start background tasks
 	go func() {
@@ -37,28 +38,34 @@ func main() {
 	}()
 
 	// Set up handlers
-	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, cfg.Target)
+	proxyHandler := proxy.NewProxy(store, statistics)
 	panelHandler := panel.NewHandler(store, cfg.Username, cfg.Password, statistics, broadcaster)
 
 	// Set up routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", panelHandler.Index)
-	mux.HandleFunc("/stats", panelHandler.Stats)
-	mux.HandleFunc("/add", panelHandler.AddRule)
-	mux.HandleFunc("/remove", panelHandler.RemoveRule)
-	mux.HandleFunc("/stats/data", panelHandler.StatsData)
-	mux.HandleFunc("/ws", panelHandler.Logs)
 
-	// Serve static files
+	// Panel routes
+	panelSubMux := http.NewServeMux()
+	panelSubMux.HandleFunc("/", panelHandler.Index)
+	panelSubMux.HandleFunc("/stats", panelHandler.Stats)
+	panelSubMux.HandleFunc("/add", panelHandler.AddRule)
+	panelSubMux.HandleFunc("/remove", panelHandler.RemoveRule)
+	panelSubMux.HandleFunc("/stats/data", panelHandler.StatsData)
+	panelSubMux.HandleFunc("/ws", panelHandler.Logs)
+
+	// Serve static files for the panel
 	fs := http.FileServer(http.Dir("internal/panel/static"))
-	mux.Handle("/static/", http.StripPrefix("/static/", fs))
+	panelSubMux.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	// Main proxy handler
-	mux.HandleFunc("/proxy/", proxyHandler.ServeHTTP)
+	// Add the panel sub-router to the main mux under the "/panel" path
+	mux.Handle("/panel/", http.StripPrefix("/panel", panelSubMux))
+
+	// The main proxy handler should handle all other requests
+	mux.Handle("/", proxyHandler)
 
 	// Start server
-	log.Printf("Starting server on :%s", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
+	log.Printf("Starting server on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
