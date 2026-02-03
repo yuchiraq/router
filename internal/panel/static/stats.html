@@ -49,23 +49,27 @@
             // --- Chart Configuration ---
             const colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
 
+            const styles = getComputedStyle(document.documentElement);
+            const chartGrid = styles.getPropertyValue('--chart-grid').trim() || 'rgba(255, 255, 255, 0.1)';
+            const chartTick = styles.getPropertyValue('--chart-tick').trim() || '#a0a0a5';
+
             const chartOptions = {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
                     x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick }
                     },
                     y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' },
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick },
                         beginAtZero: true
                     }
                 },
                 plugins: {
                     legend: {
-                        labels: { color: '#f0f0f5' }
+                        labels: { color: chartTick }
                     },
                     tooltip: {
                         callbacks: {}
@@ -100,14 +104,14 @@
                 },
                 scales: {
                     x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick }
                     },
                     y: { // Use a common 'y' axis for simplicity if scales are similar
                         type: 'linear',
                         display: true,
                         position: 'left',
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        grid: { color: chartGrid },
                         ticks: { color: '#32D74B' },
                         beginAtZero: true,
                         suggestedMax: 100,
@@ -154,14 +158,14 @@
                 },
                 scales: {
                     x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick }
                     },
                     y: { // Use a common 'y' axis for simplicity
                         type: 'linear',
                         display: true,
                         position: 'left',
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        grid: { color: chartGrid },
                         ticks: { color: '#FF9F0A' },
                         beginAtZero: true,
                         suggestedMax: 100,

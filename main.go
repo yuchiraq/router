@@ -33,6 +33,7 @@ func main() {
 	go func() {
 		for {
 			stats.RecordMemory()
+			stats.RecordCPU()
 			time.Sleep(5 * time.Second)
 		}
 	}()

@@ -13,6 +13,8 @@
     --shadow-color: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
     --nav-bg: rgba(255, 255, 255, 0.7);
     --glow-accent: radial-gradient(circle at top left, rgba(10, 132, 255, 0.12), transparent 50%);
+    --chart-grid: rgba(0, 0, 0, 0.08);
+    --chart-tick: #3c3c43;
     --accent-blue: #0a84ff;
     --accent-blue-hover: #0077e6;
     --accent-red: #ff453a;
@@ -33,6 +35,8 @@
         --surface-strong: rgba(44, 44, 46, 0.85);
         --shadow-color: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
         --nav-bg: rgba(22, 22, 24, 0.7);
+        --chart-grid: rgba(255, 255, 255, 0.1);
+        --chart-tick: #a0a0a5;
     }
 }
 
