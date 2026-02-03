@@ -171,6 +171,9 @@ func (h *Handler) RuleMaintenance(w http.ResponseWriter, r *http.Request) {
 // StatsData provides stats data as JSON
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		h.stats.RecordMemory()
+		h.stats.RecordCPU()
+		h.stats.RecordDisks()
 		requestData := h.stats.GetRequestData()
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
