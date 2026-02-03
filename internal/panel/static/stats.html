@@ -127,7 +127,8 @@
                 }
             };
 
-            const memoryChart = new Chart(document.getElementById('memory-chart').getContext('2d'), {
+            const memoryCanvas = document.getElementById('memory-chart');
+            const memoryChart = memoryCanvas ? new Chart(memoryCanvas.getContext('2d'), {
                 type: 'line',
                 data: {
                     labels: [],
@@ -141,7 +142,7 @@
                     }]
                 },
                 options: memoryChartOptions,
-            });
+            }) : null;
 
             // --- CPU Chart (Fixed) ---
             const cpuChartOptions = {
@@ -181,7 +182,8 @@
                 }
             };
 
-            const cpuChart = new Chart(document.getElementById('cpu-chart').getContext('2d'), {
+            const cpuCanvas = document.getElementById('cpu-chart');
+            const cpuChart = cpuCanvas ? new Chart(cpuCanvas.getContext('2d'), {
                 type: 'line',
                 data: {
                     labels: [],
@@ -195,14 +197,15 @@
                     }]
                 },
                 options: cpuChartOptions,
-            });
+            }) : null;
 
             // --- Requests Chart ---
-            const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
+            const requestsCanvas = document.getElementById('requests-chart');
+            const requestsChart = requestsCanvas ? new Chart(requestsCanvas.getContext('2d'), {
                 type: 'line',
                 data: { labels: [], datasets: [] },
                 options: chartOptions,
-            });
+            }) : null;
 
             // --- Disk Chart ---
             const diskChart = new Chart(document.getElementById('disk-chart').getContext('2d'), {
@@ -222,21 +225,21 @@
                     })
                     .then(data => {
                         // Update Memory Chart
-                        if (data.memory && data.memory.labels.length > 0) {
+                        if (memoryChart && data.memory && data.memory.labels.length > 0) {
                             memoryChart.data.labels = data.memory.labels;
                             memoryChart.data.datasets[0].data = data.memory.percents;
                             memoryChart.update();
                         }
 
                         // Update CPU Chart
-                        if (data.cpu && data.cpu.labels.length > 0) {
+                        if (cpuChart && data.cpu && data.cpu.labels.length > 0) {
                             cpuChart.data.labels = data.cpu.labels;
                             cpuChart.data.datasets[0].data = data.cpu.percents;
                             cpuChart.update();
                         }
 
                         // Update Requests Chart
-                        if (data.requests && data.requests.datasets) {
+                        if (requestsChart && data.requests && data.requests.datasets) {
                             requestsChart.data.labels = data.requests.labels;
                             data.requests.datasets.forEach(newDataset => {
                                 const existingDataset = requestsChart.data.datasets.find(d => d.label === newDataset.label);
