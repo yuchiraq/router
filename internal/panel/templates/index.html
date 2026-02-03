@@ -60,6 +60,22 @@
         align-items: center;
         gap: 15px;
     }
+
+    .switch-small {
+        width: 44px;
+        height: 26px;
+    }
+
+    .switch-small .slider:before {
+        height: 20px;
+        width: 20px;
+        left: 3px;
+        bottom: 3px;
+    }
+
+    .switch-small input:checked + .slider:before {
+        transform: translateX(18px);
+    }
 </style>
 {{end}}
 
@@ -106,6 +122,13 @@
                         <span class="target">{{.Target}}</span>
                     </div>
                     <div class="rule-actions">
+                        <form action="/rule/maintenance" method="post" style="display: inline;">
+                            <input type="hidden" name="host" value="{{.Host}}">
+                            <label class="switch switch-small">
+                                <input type="checkbox" name="maintenance" {{if .Maintenance}}checked{{end}} onchange="this.form.submit()">
+                                <span class="slider"></span>
+                            </label>
+                        </form>
                         <form action="/remove" method="post" style="display: inline;">
                             <input type="hidden" name="host" value="{{.Host}}">
                             <button type="submit" class="btn btn-danger">Remove</button>

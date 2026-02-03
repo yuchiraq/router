@@ -24,6 +24,9 @@ func main() {
 
 	// Initialize stats
 	stats := stats.New()
+	stats.RecordMemory()
+	stats.RecordCPU()
+	stats.RecordDisks()
 
 	// Initialize log broadcaster
 	broadcaster := logstream.New()
@@ -33,6 +36,8 @@ func main() {
 	go func() {
 		for {
 			stats.RecordMemory()
+			stats.RecordCPU()
+			stats.RecordDisks()
 			time.Sleep(5 * time.Second)
 		}
 	}()
@@ -55,6 +60,7 @@ func main() {
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
+		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
 		log.Println("Starting admin panel on :8162")
 		if err := http.ListenAndServe(":8162", panelMux); err != nil {
@@ -64,6 +70,10 @@ func main() {
 
 	// --- Proxy (Ports 80 & 443) ---
 	proxyHandler := proxy.NewProxy(store, stats)
+	proxyMux := http.NewServeMux()
+	staticFS := http.FileServer(http.Dir("internal/panel/static"))
+	proxyMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
+	proxyMux.Handle("/", proxyHandler)
 
 	// Autocert for automatic HTTPS certificates
 	certManager := &autocert.Manager{
@@ -75,7 +85,7 @@ func main() {
 	// HTTPS server
 	server := &http.Server{
 		Addr:    ":443",
-		Handler: proxyHandler,
+		Handler: proxyMux,
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
 		},

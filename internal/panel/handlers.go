@@ -150,12 +150,34 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 	}).ServeHTTP(w, r)
 }
 
+// RuleMaintenance toggles maintenance mode for a specific rule.
+func (h *Handler) RuleMaintenance(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		host := r.FormValue("host")
+		if host == "" {
+			http.Error(w, "Host is required", http.StatusBadRequest)
+			return
+		}
+		maintenance := r.FormValue("maintenance") == "on"
+		h.store.SetRuleMaintenance(host, maintenance)
+		http.Redirect(w, r, "/", http.StatusFound)
+	}).ServeHTTP(w, r)
+}
+
 // StatsData provides stats data as JSON
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		h.stats.RecordMemory()
+		h.stats.RecordCPU()
+		h.stats.RecordDisks()
 		requestData := h.stats.GetRequestData()
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
+		diskData := h.stats.GetDiskData()
 
 		data := map[string]interface{}{
 			"requests": requestData,
@@ -168,6 +190,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 				"labels":   cpuLabels,
 				"percents": cpuPercents,
 			},
+			"disks": diskData,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
