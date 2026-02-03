@@ -45,6 +45,14 @@
             </div>
         </div>
 
+        <div class="card">
+            <div class="card-header">Disk Usage</div>
+            <div class="card-body">
+                <canvas id="disk-chart"></canvas>
+                <div class="disk-table" id="disk-table"></div>
+            </div>
+        </div>
+
         <script>
             // --- Chart Configuration ---
             const colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
@@ -197,6 +205,13 @@
                 options: chartOptions,
             });
 
+            // --- Disk Chart ---
+            const diskChart = new Chart(document.getElementById('disk-chart').getContext('2d'), {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: chartOptions,
+            });
+
             // --- Data Fetching ---
             function fetchData() {
                 fetch('/stats/data')
@@ -243,6 +258,47 @@
                             );
 
                             requestsChart.update();
+                        }
+
+                        // Update Disk Chart + Table
+                        if (data.disks && data.disks.chart) {
+                            const diskChartData = data.disks.chart;
+                            diskChart.data.labels = diskChartData.labels || [];
+                            diskChartData.datasets.forEach(newDataset => {
+                                const existingDataset = diskChart.data.datasets.find(d => d.label === newDataset.label);
+                                if (existingDataset) {
+                                    existingDataset.data = newDataset.data;
+                                } else {
+                                    const color = colorHash.hex(newDataset.label);
+                                    diskChart.data.datasets.push({
+                                        ...newDataset,
+                                        borderColor: color,
+                                        backgroundColor: color + '33',
+                                        fill: true,
+                                    });
+                                }
+                            });
+                            diskChart.data.datasets = diskChart.data.datasets.filter(d =>
+                                diskChartData.datasets.some(nd => nd.label === d.label)
+                            );
+                            diskChart.update();
+                        }
+
+                        if (data.disks && data.disks.latest) {
+                            const table = document.getElementById('disk-table');
+                            const rows = data.disks.latest.map(disk => `
+                                <div class="disk-row">
+                                    <div class="disk-main">
+                                        <div class="disk-title">${disk.mountpoint}</div>
+                                        <div class="disk-subtitle">${disk.device} • ${disk.fstype}</div>
+                                    </div>
+                                    <div class="disk-metrics">
+                                        <div><strong>${disk.usedPercent.toFixed(1)}%</strong> used</div>
+                                        <div>${disk.freeGB.toFixed(1)} GB free / ${disk.totalGB.toFixed(1)} GB total</div>
+                                    </div>
+                                </div>
+                            `).join('');
+                            table.innerHTML = rows || '<div class="disk-empty">No disks found.</div>';
                         }
                     })
                     .catch(error => {

@@ -301,6 +301,51 @@ canvas {
     height: 300px !important;
 }
 
+/* --- Disk Stats --- */
+.disk-table {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.disk-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--surface-strong);
+    border: 1px solid var(--border-color);
+    gap: 16px;
+}
+
+.disk-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.disk-title {
+    font-weight: 600;
+}
+
+.disk-subtitle {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.disk-metrics {
+    text-align: right;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.disk-empty {
+    color: var(--text-secondary);
+    padding: 8px 0;
+}
+
 /* --- Maintenance Page --- */
 .maintenance-body {
     display: flex;
@@ -376,6 +421,15 @@ canvas {
     .rule-item {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .disk-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .disk-metrics {
+        text-align: left;
     }
 
     .maintenance {

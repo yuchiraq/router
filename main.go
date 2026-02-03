@@ -30,13 +30,14 @@ func main() {
 	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
 
 	// Start memory recording
-	go func() {
-		for {
-			stats.RecordMemory()
-			stats.RecordCPU()
-			time.Sleep(5 * time.Second)
-		}
-	}()
+		go func() {
+			for {
+				stats.RecordMemory()
+				stats.RecordCPU()
+				stats.RecordDisks()
+				time.Sleep(5 * time.Second)
+			}
+		}()
 
 	// Get admin credentials from environment variables
 	adminUser := os.Getenv("ADMIN_USER")
