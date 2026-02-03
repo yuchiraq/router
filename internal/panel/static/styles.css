@@ -1,26 +1,64 @@
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 /* --- Base & Fonts --- */
 :root {
-    --bg-color: #161618;
-    --card-color: #1e1e20;
-    --border-color: rgba(255, 255, 255, 0.1);
-    --text-primary: #f0f0f5;
-    --text-secondary: #a0a0a5;
-    --accent-blue: #0A84FF;
+    --bg-color: #f0f2f5;
+    --bg-glow: radial-gradient(circle, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0) 70%);
+    --text-primary: #1c1c1e;
+    --text-secondary: #4c4c52;
+    --border-color: rgba(255, 255, 255, 0.4);
+    --surface-color: rgba(255, 255, 255, 0.7);
+    --surface-strong: rgba(255, 255, 255, 0.85);
+    --shadow-color: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+    --nav-bg: rgba(255, 255, 255, 0.7);
+    --glow-accent: radial-gradient(circle at top left, rgba(10, 132, 255, 0.12), transparent 50%);
+    --chart-grid: rgba(0, 0, 0, 0.08);
+    --chart-tick: #3c3c43;
+    --accent-blue: #0a84ff;
     --accent-blue-hover: #0077e6;
-    --accent-red: #FF453A;
+    --accent-red: #ff453a;
     --accent-red-hover: #ff2d21;
-    --accent-green: #30D158;
+    --accent-green: #30d158;
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-mono: 'Menlo', 'DejaVu Sans Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #1c1c1e;
+        --bg-glow: radial-gradient(circle, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 70%);
+        --text-primary: #f0f0f5;
+        --text-secondary: #a0a0a5;
+        --border-color: rgba(255, 255, 255, 0.18);
+        --surface-color: rgba(44, 44, 46, 0.7);
+        --surface-strong: rgba(44, 44, 46, 0.85);
+        --shadow-color: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+        --nav-bg: rgba(22, 22, 24, 0.7);
+        --chart-grid: rgba(255, 255, 255, 0.1);
+        --chart-tick: #a0a0a5;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body,
+html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
 }
 
 body {
     font-family: var(--font-sans);
     background-color: var(--bg-color);
+    background-image: var(--bg-glow), var(--glow-accent);
     color: var(--text-primary);
-    margin: 0;
-    padding-top: 60px; /* Nav height */
+    padding-top: 60px;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* --- Navigation --- */
@@ -30,7 +68,7 @@ body {
     left: 0;
     right: 0;
     height: 60px;
-    background-color: rgba(22, 22, 24, 0.7);
+    background-color: var(--nav-bg);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border-color);
@@ -86,16 +124,19 @@ body {
 }
 
 .card {
-    background-color: var(--card-color);
+    background-color: var(--surface-color);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--border-color);
     border-radius: 16px;
     margin-bottom: 24px;
     overflow: hidden;
     transition: box-shadow 0.3s ease;
+    box-shadow: var(--shadow-color);
 }
 
 .card:hover {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
 }
 
 .card-header {
@@ -115,17 +156,23 @@ body {
     display: flex;
     gap: 16px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .form-control {
     flex: 1;
     padding: 12px 16px;
-    background-color: var(--bg-color);
+    background-color: var(--surface-strong);
     border: 1px solid var(--border-color);
     border-radius: 10px;
     font-size: 15px;
     color: var(--text-primary);
     transition: all 0.2s ease-in-out;
+}
+
+.form-control::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.8;
 }
 
 .form-control:focus {
@@ -174,6 +221,7 @@ body {
     padding: 16px 0;
     border-bottom: 1px solid var(--border-color);
     transition: background-color 0.2s ease;
+    gap: 16px;
 }
 
 .rule-item:last-child {
@@ -181,7 +229,7 @@ body {
 }
 
 .rule-item:hover {
-    background-color: rgba(255, 255, 255, 0.03);
+    background-color: rgba(255, 255, 255, 0.08);
 }
 
 .rule-info {
@@ -233,7 +281,7 @@ body {
 /* --- Stats & Logs --- */
 #log-console {
     height: 350px;
-    background-color: #111;
+    background-color: rgba(0, 0, 0, 0.5);
     color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: 13px;
@@ -251,4 +299,125 @@ body {
 canvas {
     width: 100% !important;
     height: 300px !important;
+}
+
+/* --- Maintenance Page --- */
+.maintenance-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding-top: 0;
+}
+
+.maintenance {
+    text-align: center;
+    padding: 40px;
+    border-radius: 20px;
+    max-width: 520px;
+    margin: 20px auto;
+    background: var(--surface-color);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--shadow-color);
+    border: 1px solid var(--border-color);
+}
+
+/* --- Responsive --- */
+@media (max-width: 900px) {
+    .nav-container {
+        padding: 0 16px;
+    }
+
+    .container {
+        margin: 24px auto;
+        padding: 0 16px;
+    }
+}
+
+@media (max-width: 720px) {
+    body {
+        padding-top: 56px;
+    }
+
+    .nav {
+        height: 56px;
+    }
+
+    .nav-container {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 8px 16px;
+    }
+
+    .nav-links a {
+        margin-left: 0;
+        margin-right: 16px;
+    }
+
+    .header h1 {
+        font-size: 30px;
+    }
+
+    .card-body {
+        padding: 20px;
+    }
+
+    .form-inline {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn {
+        width: 100%;
+    }
+
+    .rule-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .maintenance {
+        padding: 32px 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .nav-logo {
+        font-size: 18px;
+    }
+
+    .header h1 {
+        font-size: 26px;
+    }
+
+    .card-header {
+        font-size: 16px;
+    }
+
+    .card-body {
+        padding: 16px;
+    }
+}
+
+.maintenance-icon {
+    font-size: 60px;
+    margin-bottom: 20px;
+    animation: spin 4s linear infinite;
+}
+
+.maintenance p {
+    color: var(--text-secondary);
+    font-size: 18px;
+    line-height: 1.6;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
