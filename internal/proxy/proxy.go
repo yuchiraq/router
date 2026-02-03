@@ -36,16 +36,22 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target, ok := p.store.Get(r.Host)
+	rule, ok := p.store.GetRule(r.Host)
 	if !ok {
 		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
+	if rule.Maintenance {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		p.maintenanceTmpl.Execute(w, nil)
 		return
 	}
 
 	// Add request to stats with the specific host
 	p.stats.AddRequest(r.Host)
 
-	targetURL, err := url.Parse("http://" + target)
+	targetURL, err := url.Parse("http://" + rule.Target)
 	if err != nil {
 		log.Printf("Error parsing target URL for host %s: %v", r.Host, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

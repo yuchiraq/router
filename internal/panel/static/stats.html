@@ -6,9 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stats - Router</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="/static/chart.js"></script>
     <script src="/static/color-hash.js"></script>
 </head>
@@ -48,27 +45,55 @@
             </div>
         </div>
 
+        <div class="card">
+            <div class="card-header">Disk Usage</div>
+            <div class="card-body">
+                <div class="disk-table" id="disk-table"></div>
+            </div>
+        </div>
+
         <script>
+            (function () {
+            const memoryCanvas = document.getElementById('memory-chart');
+            const cpuCanvas = document.getElementById('cpu-chart');
+            const requestsCanvas = document.getElementById('requests-chart');
+            const memoryContext = memoryCanvas && typeof memoryCanvas.getContext === 'function'
+                ? memoryCanvas.getContext('2d')
+                : null;
+            const cpuContext = cpuCanvas && typeof cpuCanvas.getContext === 'function'
+                ? cpuCanvas.getContext('2d')
+                : null;
+            const requestsContext = requestsCanvas && typeof requestsCanvas.getContext === 'function'
+                ? requestsCanvas.getContext('2d')
+                : null;
+            if (!memoryContext || !cpuContext || !requestsContext) {
+                console.warn('Charts not initialized: missing canvas elements.');
+                return;
+            }
             // --- Chart Configuration ---
             const colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
+
+            const styles = getComputedStyle(document.documentElement);
+            const chartGrid = styles.getPropertyValue('--chart-grid').trim() || 'rgba(255, 255, 255, 0.1)';
+            const chartTick = styles.getPropertyValue('--chart-tick').trim() || '#a0a0a5';
 
             const chartOptions = {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
                     x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick }
                     },
                     y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' },
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick },
                         beginAtZero: true
                     }
                 },
                 plugins: {
                     legend: {
-                        labels: { color: '#f0f0f5' }
+                        labels: { color: chartTick }
                     },
                     tooltip: {
                         callbacks: {}
@@ -83,13 +108,28 @@
 
             // --- Memory Chart (Working Example) ---
             const memoryChartOptions = {
-                ...chartOptions,
+                responsive: chartOptions.responsive,
+                maintainAspectRatio: chartOptions.maintainAspectRatio,
+                scales: {
+                    x: {
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick }
+                    },
+                    y: { // Use a common 'y' axis for simplicity if scales are similar
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: { color: chartGrid },
+                        ticks: { color: '#32D74B' },
+                        beginAtZero: true,
+                        suggestedMax: 100,
+                        title: { display: true, text: '%', color: '#32D74B' }
+                    }
+                },
                 plugins: {
-                    ...chartOptions.plugins,
+                    legend: chartOptions.plugins.legend,
                     tooltip: {
-                        ...chartOptions.plugins.tooltip,
                         callbacks: {
-                            ...chartOptions.plugins.tooltip.callbacks,
                             label: function(context) {
                                 let label = context.dataset.label || '';
                                 if (label) { label += ': '; }
@@ -101,25 +141,11 @@
                         }
                     }
                 },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
-                    },
-                    y: { // Use a common 'y' axis for simplicity if scales are similar
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#32D74B' },
-                        beginAtZero: true,
-                        suggestedMax: 100,
-                        title: { display: true, text: '%', color: '#32D74B' }
-                    }
-                }
+                interaction: chartOptions.interaction,
+                tension: chartOptions.tension,
             };
 
-            const memoryChart = new Chart(document.getElementById('memory-chart').getContext('2d'), {
+            const memoryChart = new Chart(memoryContext, {
                 type: 'line',
                 data: {
                     labels: [],
@@ -137,13 +163,28 @@
 
             // --- CPU Chart (Fixed) ---
             const cpuChartOptions = {
-                ...chartOptions,
+                responsive: chartOptions.responsive,
+                maintainAspectRatio: chartOptions.maintainAspectRatio,
+                scales: {
+                    x: {
+                        grid: { color: chartGrid },
+                        ticks: { color: chartTick }
+                    },
+                    y: { // Use a common 'y' axis for simplicity
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: { color: chartGrid },
+                        ticks: { color: '#FF9F0A' },
+                        beginAtZero: true,
+                        suggestedMax: 100,
+                        title: { display: true, text: '%', color: '#FF9F0A' }
+                    }
+                },
                 plugins: {
-                    ...chartOptions.plugins,
+                    legend: chartOptions.plugins.legend,
                     tooltip: {
-                        ...chartOptions.plugins.tooltip,
                         callbacks: {
-                            ...chartOptions.plugins.tooltip.callbacks,
                             label: function(context) {
                                 let label = context.dataset.label || '';
                                 if (label) { label += ': '; }
@@ -155,25 +196,11 @@
                         }
                     }
                 },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
-                    },
-                    y: { // Use a common 'y' axis for simplicity
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#FF9F0A' },
-                        beginAtZero: true,
-                        suggestedMax: 100,
-                        title: { display: true, text: '%', color: '#FF9F0A' }
-                    }
-                }
+                interaction: chartOptions.interaction,
+                tension: chartOptions.tension,
             };
 
-            const cpuChart = new Chart(document.getElementById('cpu-chart').getContext('2d'), {
+            const cpuChart = new Chart(cpuContext, {
                 type: 'line',
                 data: {
                     labels: [],
@@ -190,7 +217,7 @@
             });
 
             // --- Requests Chart ---
-            const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
+            const requestsChart = new Chart(requestsContext, {
                 type: 'line',
                 data: { labels: [], datasets: [] },
                 options: chartOptions,
@@ -198,7 +225,7 @@
 
             // --- Data Fetching ---
             function fetchData() {
-                fetch('/stats/data')
+                fetch('/stats/data', { credentials: 'same-origin' })
                     .then(response => {
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
@@ -243,6 +270,26 @@
 
                             requestsChart.update();
                         }
+
+                        if (data.disks) {
+                            const table = document.getElementById('disk-table');
+                            const rows = data.disks.map(disk => `
+                                <div class="disk-row">
+                                    <div class="disk-main">
+                                        <div class="disk-title">${disk.mountpoint}</div>
+                                        <div class="disk-subtitle">${disk.device} • ${disk.fstype}</div>
+                                    </div>
+                                    <div class="disk-metrics">
+                                        <div><strong>${disk.usedPercent.toFixed(1)}%</strong> used</div>
+                                        <div>${disk.freeGB.toFixed(1)} GB free / ${disk.totalGB.toFixed(1)} GB total</div>
+                                    </div>
+                                    <div class="disk-bar">
+                                        <div class="disk-bar-fill" style="width: ${disk.usedPercent.toFixed(1)}%"></div>
+                                    </div>
+                                </div>
+                            `).join('');
+                            table.innerHTML = rows || '<div class="disk-empty">No disks found.</div>';
+                        }
                     })
                     .catch(error => {
                         console.error('Error fetching stats data:', error);
@@ -252,7 +299,7 @@
             // --- Initial Load & Interval ---
             setInterval(fetchData, 3000);
             fetchData();
-
+            })();
         </script>
     </main>
 </body>
