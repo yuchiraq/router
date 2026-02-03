@@ -48,7 +48,6 @@
         <div class="card">
             <div class="card-header">Disk Usage</div>
             <div class="card-body">
-                <canvas id="disk-chart"></canvas>
                 <div class="disk-table" id="disk-table"></div>
             </div>
         </div>
@@ -260,33 +259,9 @@
                             requestsChart.update();
                         }
 
-                        // Update Disk Chart + Table
-                        if (data.disks && data.disks.chart) {
-                            const diskChartData = data.disks.chart;
-                            diskChart.data.labels = diskChartData.labels || [];
-                            diskChartData.datasets.forEach(newDataset => {
-                                const existingDataset = diskChart.data.datasets.find(d => d.label === newDataset.label);
-                                if (existingDataset) {
-                                    existingDataset.data = newDataset.data;
-                                } else {
-                                    const color = colorHash.hex(newDataset.label);
-                                    diskChart.data.datasets.push({
-                                        ...newDataset,
-                                        borderColor: color,
-                                        backgroundColor: color + '33',
-                                        fill: true,
-                                    });
-                                }
-                            });
-                            diskChart.data.datasets = diskChart.data.datasets.filter(d =>
-                                diskChartData.datasets.some(nd => nd.label === d.label)
-                            );
-                            diskChart.update();
-                        }
-
-                        if (data.disks && data.disks.latest) {
+                        if (data.disks) {
                             const table = document.getElementById('disk-table');
-                            const rows = data.disks.latest.map(disk => `
+                            const rows = data.disks.map(disk => `
                                 <div class="disk-row">
                                     <div class="disk-main">
                                         <div class="disk-title">${disk.mountpoint}</div>
@@ -295,6 +270,9 @@
                                     <div class="disk-metrics">
                                         <div><strong>${disk.usedPercent.toFixed(1)}%</strong> used</div>
                                         <div>${disk.freeGB.toFixed(1)} GB free / ${disk.totalGB.toFixed(1)} GB total</div>
+                                    </div>
+                                    <div class="disk-bar">
+                                        <div class="disk-bar-fill" style="width: ${disk.usedPercent.toFixed(1)}%"></div>
                                     </div>
                                 </div>
                             `).join('');

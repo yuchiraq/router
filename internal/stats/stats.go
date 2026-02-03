@@ -2,6 +2,7 @@
 package stats
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -124,6 +125,9 @@ func (s *Stats) RecordDisks() {
 		if partition.Mountpoint == "" || partition.Device == "" {
 			continue
 		}
+		if partition.Mountpoint != "/" && !strings.HasPrefix(partition.Mountpoint, "/media/") {
+			continue
+		}
 		usage, err := disk.Usage(partition.Mountpoint)
 		if err != nil {
 			continue
@@ -152,53 +156,15 @@ func (s *Stats) RecordDisks() {
 	}
 }
 
-// GetDiskData returns disk usage history grouped by mountpoint.
-func (s *Stats) GetDiskData() map[string]interface{} {
+// GetDiskData returns latest disk usage for tracked mountpoints.
+func (s *Stats) GetDiskData() []map[string]interface{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	type diskSeries struct {
-		Labels   []string
-		Used     []float64
-		FreeGB   []float64
-		TotalGB  []float64
-		Device   string
-		Fstype   string
-	}
-
-	seriesByMount := make(map[string]*diskSeries)
 	latestByMount := make(map[string]DiskUsage)
 
 	for _, entry := range s.disks {
-		series, ok := seriesByMount[entry.Mountpoint]
-		if !ok {
-			series = &diskSeries{
-				Labels:  []string{},
-				Used:    []float64{},
-				FreeGB:  []float64{},
-				TotalGB: []float64{},
-				Device:  entry.Device,
-				Fstype:  entry.Fstype,
-			}
-			seriesByMount[entry.Mountpoint] = series
-		}
-		series.Labels = append(series.Labels, entry.Time.Format("15:04:05"))
-		series.Used = append(series.Used, entry.UsedPercent)
-		series.FreeGB = append(series.FreeGB, float64(entry.Free)/1024/1024/1024)
-		series.TotalGB = append(series.TotalGB, float64(entry.Total)/1024/1024/1024)
 		latestByMount[entry.Mountpoint] = entry
-	}
-
-	chartLabels := []string{}
-	chartDatasets := []map[string]interface{}{}
-	for mountpoint, series := range seriesByMount {
-		if len(series.Labels) > len(chartLabels) {
-			chartLabels = series.Labels
-		}
-		chartDatasets = append(chartDatasets, map[string]interface{}{
-			"label": mountpoint,
-			"data":  series.Used,
-		})
 	}
 
 	latest := []map[string]interface{}{}
@@ -213,13 +179,7 @@ func (s *Stats) GetDiskData() map[string]interface{} {
 		})
 	}
 
-	return map[string]interface{}{
-		"chart": map[string]interface{}{
-			"labels":   chartLabels,
-			"datasets": chartDatasets,
-		},
-		"latest": latest,
-	}
+	return latest
 }
 
 // GetRequestData returns request data grouped by host for charting
