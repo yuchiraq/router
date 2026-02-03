@@ -14,6 +14,7 @@ import (
 type Rule struct {
 	Host        string    `json:"-"` // Host is the map key, not stored in the struct's JSON
 	Target      string    `json:"target"`
+	Maintenance bool      `json:"maintenance"`
 	LastAccess  time.Time `json:"-"`
 	ServiceDown bool      `json:"-"`
 }
@@ -78,6 +79,18 @@ func (s *RuleStore) Get(host string) (string, bool) {
 	return "", false
 }
 
+// GetRule retrieves a rule with full metadata.
+func (s *RuleStore) GetRule(host string) (*Rule, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rule, ok := s.rules[host]
+	if ok {
+		rule.LastAccess = time.Now()
+		return rule, true
+	}
+	return nil, false
+}
+
 // All returns all rules as a slice, with the Host field populated for template use.
 func (s *RuleStore) All() []*Rule {
 	s.mu.RLock()
@@ -107,6 +120,18 @@ func (s *RuleStore) SetMaintenanceMode(enabled bool) {
     defer s.mu.Unlock()
     s.MaintenanceMode = enabled
     s.storage.Save(s.rules, s.MaintenanceMode) // Save the updated state
+}
+
+// SetRuleMaintenance updates maintenance mode for a specific rule.
+func (s *RuleStore) SetRuleMaintenance(host string, enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rule, ok := s.rules[host]
+	if !ok {
+		return
+	}
+	rule.Maintenance = enabled
+	s.storage.Save(s.rules, s.MaintenanceMode)
 }
 
 

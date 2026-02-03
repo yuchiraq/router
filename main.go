@@ -24,20 +24,23 @@ func main() {
 
 	// Initialize stats
 	stats := stats.New()
+	stats.RecordMemory()
+	stats.RecordCPU()
+	stats.RecordDisks()
 
 	// Initialize log broadcaster
 	broadcaster := logstream.New()
 	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
 
 	// Start memory recording
-		go func() {
-			for {
-				stats.RecordMemory()
-				stats.RecordCPU()
-				stats.RecordDisks()
-				time.Sleep(5 * time.Second)
-			}
-		}()
+	go func() {
+		for {
+			stats.RecordMemory()
+			stats.RecordCPU()
+			stats.RecordDisks()
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	// Get admin credentials from environment variables
 	adminUser := os.Getenv("ADMIN_USER")
@@ -57,6 +60,7 @@ func main() {
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
+		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
 		log.Println("Starting admin panel on :8162")
 		if err := http.ListenAndServe(":8162", panelMux); err != nil {
