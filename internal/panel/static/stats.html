@@ -213,7 +213,7 @@
 
             // --- Data Fetching ---
             function fetchData() {
-                fetch('/stats/data')
+                fetch('/stats/data', { credentials: 'same-origin' })
                     .then(response => {
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
