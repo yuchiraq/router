@@ -204,6 +204,13 @@
                 options: chartOptions,
             });
 
+            // --- Disk Chart ---
+            const diskChart = new Chart(document.getElementById('disk-chart').getContext('2d'), {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: chartOptions,
+            });
+
             // --- Data Fetching ---
             function fetchData() {
                 fetch('/stats/data')
