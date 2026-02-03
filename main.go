@@ -30,12 +30,14 @@ func main() {
 	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
 
 	// Start memory recording
-	go func() {
-		for {
-			stats.RecordMemory()
-			time.Sleep(5 * time.Second)
-		}
-	}()
+		go func() {
+			for {
+				stats.RecordMemory()
+				stats.RecordCPU()
+				stats.RecordDisks()
+				time.Sleep(5 * time.Second)
+			}
+		}()
 
 	// Get admin credentials from environment variables
 	adminUser := os.Getenv("ADMIN_USER")
@@ -64,6 +66,10 @@ func main() {
 
 	// --- Proxy (Ports 80 & 443) ---
 	proxyHandler := proxy.NewProxy(store, stats)
+	proxyMux := http.NewServeMux()
+	staticFS := http.FileServer(http.Dir("internal/panel/static"))
+	proxyMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
+	proxyMux.Handle("/", proxyHandler)
 
 	// Autocert for automatic HTTPS certificates
 	certManager := &autocert.Manager{
@@ -75,7 +81,7 @@ func main() {
 	// HTTPS server
 	server := &http.Server{
 		Addr:    ":443",
-		Handler: proxyHandler,
+		Handler: proxyMux,
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
 		},

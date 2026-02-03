@@ -156,6 +156,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		requestData := h.stats.GetRequestData()
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
+		diskData := h.stats.GetDiskData()
 
 		data := map[string]interface{}{
 			"requests": requestData,
@@ -168,6 +169,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 				"labels":   cpuLabels,
 				"percents": cpuPercents,
 			},
+			"disks": diskData,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

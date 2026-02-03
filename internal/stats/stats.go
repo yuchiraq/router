@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
 )
 
@@ -28,12 +29,24 @@ type CPU struct {
 	Percent float64 // Used CPU in percentage
 }
 
+// DiskUsage represents a single disk usage entry
+type DiskUsage struct {
+	Time        time.Time
+	Mountpoint  string
+	Device      string
+	Fstype      string
+	UsedPercent float64
+	Free        uint64
+	Total       uint64
+}
+
 // Stats holds the collected statistics
 type Stats struct {
 	mu       sync.RWMutex
 	requests []Request
 	memory   []Memory
 	cpu      []CPU
+	disks    []DiskUsage
 }
 
 // New creates a new Stats instance
@@ -42,6 +55,7 @@ func New() *Stats {
 		requests: make([]Request, 0, 10000), // Pre-allocate for performance
 		memory:   make([]Memory, 0, 1000),   // Pre-allocate
 		cpu:      make([]CPU, 0, 1000),      // Pre-allocate
+		disks:    make([]DiskUsage, 0, 4000),
 	}
 }
 
@@ -75,10 +89,12 @@ func (s *Stats) RecordMemory() {
 
 // RecordCPU records the current CPU usage
 func (s *Stats) RecordCPU() {
-	// Get system CPU stats over 1 second
-	percent, err := cpu.Percent(time.Second, false)
+	percent, err := cpu.Percent(0, false)
 	if err != nil || len(percent) == 0 {
-		return
+		percent, err = cpu.Percent(time.Second, false)
+		if err != nil || len(percent) == 0 {
+			return
+		}
 	}
 
 	s.mu.Lock()
@@ -92,6 +108,117 @@ func (s *Stats) RecordCPU() {
 	// Optional: Keep CPU slice from growing indefinitely
 	if len(s.cpu) > 1000 {
 		s.cpu = s.cpu[len(s.cpu)-1000:]
+	}
+}
+
+// RecordDisks records usage for all mounted disks.
+func (s *Stats) RecordDisks() {
+	partitions, err := disk.Partitions(false)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	entries := make([]DiskUsage, 0, len(partitions))
+	for _, partition := range partitions {
+		if partition.Mountpoint == "" || partition.Device == "" {
+			continue
+		}
+		usage, err := disk.Usage(partition.Mountpoint)
+		if err != nil {
+			continue
+		}
+		entries = append(entries, DiskUsage{
+			Time:        now,
+			Mountpoint:  partition.Mountpoint,
+			Device:      partition.Device,
+			Fstype:      partition.Fstype,
+			UsedPercent: usage.UsedPercent,
+			Free:        usage.Free,
+			Total:       usage.Total,
+		})
+	}
+
+	if len(entries) == 0 {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.disks = append(s.disks, entries...)
+	if len(s.disks) > 4000 {
+		s.disks = s.disks[len(s.disks)-4000:]
+	}
+}
+
+// GetDiskData returns disk usage history grouped by mountpoint.
+func (s *Stats) GetDiskData() map[string]interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	type diskSeries struct {
+		Labels   []string
+		Used     []float64
+		FreeGB   []float64
+		TotalGB  []float64
+		Device   string
+		Fstype   string
+	}
+
+	seriesByMount := make(map[string]*diskSeries)
+	latestByMount := make(map[string]DiskUsage)
+
+	for _, entry := range s.disks {
+		series, ok := seriesByMount[entry.Mountpoint]
+		if !ok {
+			series = &diskSeries{
+				Labels:  []string{},
+				Used:    []float64{},
+				FreeGB:  []float64{},
+				TotalGB: []float64{},
+				Device:  entry.Device,
+				Fstype:  entry.Fstype,
+			}
+			seriesByMount[entry.Mountpoint] = series
+		}
+		series.Labels = append(series.Labels, entry.Time.Format("15:04:05"))
+		series.Used = append(series.Used, entry.UsedPercent)
+		series.FreeGB = append(series.FreeGB, float64(entry.Free)/1024/1024/1024)
+		series.TotalGB = append(series.TotalGB, float64(entry.Total)/1024/1024/1024)
+		latestByMount[entry.Mountpoint] = entry
+	}
+
+	chartLabels := []string{}
+	chartDatasets := []map[string]interface{}{}
+	for mountpoint, series := range seriesByMount {
+		if len(series.Labels) > len(chartLabels) {
+			chartLabels = series.Labels
+		}
+		chartDatasets = append(chartDatasets, map[string]interface{}{
+			"label": mountpoint,
+			"data":  series.Used,
+		})
+	}
+
+	latest := []map[string]interface{}{}
+	for mountpoint, entry := range latestByMount {
+		latest = append(latest, map[string]interface{}{
+			"mountpoint":  mountpoint,
+			"device":      entry.Device,
+			"fstype":      entry.Fstype,
+			"usedPercent": entry.UsedPercent,
+			"freeGB":      float64(entry.Free) / 1024 / 1024 / 1024,
+			"totalGB":     float64(entry.Total) / 1024 / 1024 / 1024,
+		})
+	}
+
+	return map[string]interface{}{
+		"chart": map[string]interface{}{
+			"labels":   chartLabels,
+			"datasets": chartDatasets,
+		},
+		"latest": latest,
 	}
 }
 
