@@ -53,6 +53,17 @@
         </div>
 
         <script>
+            (function () {
+            const memoryCanvas = document.getElementById('memory-chart');
+            const cpuCanvas = document.getElementById('cpu-chart');
+            const requestsCanvas = document.getElementById('requests-chart');
+            const memoryContext = memoryCanvas?.getContext?.('2d');
+            const cpuContext = cpuCanvas?.getContext?.('2d');
+            const requestsContext = requestsCanvas?.getContext?.('2d');
+            if (!memoryContext || !cpuContext || !requestsContext) {
+                console.warn('Charts not initialized: missing canvas elements.');
+                return;
+            }
             // --- Chart Configuration ---
             const colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
 
@@ -127,8 +138,7 @@
                 }
             };
 
-            const memoryCanvas = document.getElementById('memory-chart');
-            const memoryChart = memoryCanvas ? new Chart(memoryCanvas.getContext('2d'), {
+            const memoryChart = new Chart(memoryContext, {
                 type: 'line',
                 data: {
                     labels: [],
@@ -182,8 +192,7 @@
                 }
             };
 
-            const cpuCanvas = document.getElementById('cpu-chart');
-            const cpuChart = cpuCanvas ? new Chart(cpuCanvas.getContext('2d'), {
+            const cpuChart = new Chart(cpuContext, {
                 type: 'line',
                 data: {
                     labels: [],
@@ -200,15 +209,7 @@
             }) : null;
 
             // --- Requests Chart ---
-            const requestsCanvas = document.getElementById('requests-chart');
-            const requestsChart = requestsCanvas ? new Chart(requestsCanvas.getContext('2d'), {
-                type: 'line',
-                data: { labels: [], datasets: [] },
-                options: chartOptions,
-            }) : null;
-
-            // --- Disk Chart ---
-            const diskChart = new Chart(document.getElementById('disk-chart').getContext('2d'), {
+            const requestsChart = new Chart(requestsContext, {
                 type: 'line',
                 data: { labels: [], datasets: [] },
                 options: chartOptions,
@@ -290,7 +291,7 @@
             // --- Initial Load & Interval ---
             setInterval(fetchData, 3000);
             fetchData();
-
+            })();
         </script>
     </main>
 </body>
