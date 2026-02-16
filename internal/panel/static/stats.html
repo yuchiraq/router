@@ -45,6 +45,24 @@
         </div>
 
         <div class="card">
+            <div class="card-header">SSH Connections</div>
+            <div class="card-body">
+                <div class="ssh-current" id="ssh-current">Current established: 0</div>
+                <div class="ssh-table ssh-table-head">
+                    <div>IP</div><div>Country</div><div>Date</div><div>Time</div><div>Device</div>
+                </div>
+                <div class="ssh-table" id="ssh-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Requests by Country</div>
+            <div class="card-body">
+                <div class="country-table" id="country-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-header">Disk Usage</div>
             <div class="card-body">
                 <div class="disk-table" id="disk-table"></div>
@@ -223,6 +241,7 @@
                     options: chartOptions
                 });
 
+
                 // --- Data Fetching ---
                 function fetchData() {
                     fetch('/stats/data', { credentials: 'same-origin' })
@@ -271,6 +290,39 @@
                                 });
 
                                 requestsChart.update();
+                            }
+
+
+                            if (data.ssh) {
+                                var sshCurrent = document.getElementById('ssh-current');
+                                sshCurrent.textContent = 'Current established: ' + (data.ssh.current || 0);
+
+                                var sshTable = document.getElementById('ssh-table');
+                                var sshRows = (data.ssh.sessions || []).map(function(session) {
+                                    return (
+                                        '<div class="ssh-row">' +
+                                            '<div class="ssh-ip">' + session.ip + ':' + session.port + '</div>' +
+                                            '<div class="ssh-country">' + session.countryName + ' (' + session.countryCode + ')</div>' +
+                                            '<div class="ssh-date">' + session.date + '</div>' +
+                                            '<div class="ssh-time">' + session.time + '</div>' +
+                                            '<div class="ssh-device">' + session.device + '</div>' +
+                                        '</div>'
+                                    );
+                                }).join('');
+                                sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH sessions.</div>';
+                            }
+
+                            if (data.countries) {
+                                var countryTable = document.getElementById('country-table');
+                                var countryRows = data.countries.map(function(country) {
+                                    return (
+                                        '<div class="country-row">' +
+                                            '<div class="country-name">' + country.name + ' <span>(' + country.code + ')</span></div>' +
+                                            '<div class="country-count">' + country.count + '</div>' +
+                                        '</div>'
+                                    );
+                                }).join('');
+                                countryTable.innerHTML = countryRows || '<div class="disk-empty">No country data yet.</div>';
                             }
 
                             if (data.disks) {
