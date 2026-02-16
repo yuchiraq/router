@@ -58,7 +58,6 @@ type Stats struct {
 	memory       []Memory
 	cpu          []CPU
 	disks        []DiskUsage
-	ssh          []SSHConnections
 	countryStats map[string]int
 }
 
@@ -69,7 +68,6 @@ func New() *Stats {
 		memory:       make([]Memory, 0, 1000),   // Pre-allocate
 		cpu:          make([]CPU, 0, 1000),      // Pre-allocate
 		disks:        make([]DiskUsage, 0, 4000),
-		ssh:          make([]SSHConnections, 0, 1000),
 		countryStats: make(map[string]int),
 	}
 }
