@@ -57,7 +57,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add request to stats with the specific host
-	p.stats.AddRequest(r.Host)
+	p.stats.AddRequest(r.Host, stats.CountryFromRequest(r))
 
 	targetURL, err := url.Parse("http://" + rule.Target)
 	if err != nil {

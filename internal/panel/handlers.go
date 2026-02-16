@@ -1,4 +1,3 @@
-
 package panel
 
 import (
@@ -86,7 +85,7 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
 		log.Printf("Error executing template %s: %v", name, err)
-        http.Error(w, "Error rendering page", http.StatusInternalServerError)
+		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
 
@@ -178,6 +177,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
 		diskData := h.stats.GetDiskData()
+		countryData := h.stats.GetCountryData()
 
 		data := map[string]interface{}{
 			"requests": requestData,
@@ -190,7 +190,8 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 				"labels":   cpuLabels,
 				"percents": cpuPercents,
 			},
-			"disks": diskData,
+			"disks":     diskData,
+			"countries": countryData,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
