@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"html/template"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"

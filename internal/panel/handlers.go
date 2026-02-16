@@ -3,8 +3,8 @@ package panel
 import (
 	"encoding/json"
 	"html/template"
-	"log"
 	"net/http"
+	"router/internal/clog"
 
 	"github.com/gorilla/websocket"
 	"router/internal/logstream"
