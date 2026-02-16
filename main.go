@@ -71,8 +71,6 @@ func main() {
 	// --- Proxy (Ports 80 & 443) ---
 	proxyHandler := proxy.NewProxy(store, stats)
 	proxyMux := http.NewServeMux()
-	staticFS := http.FileServer(http.Dir("internal/panel/static"))
-	proxyMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
 	proxyMux.Handle("/", proxyHandler)
 
 	// Autocert for automatic HTTPS certificates
