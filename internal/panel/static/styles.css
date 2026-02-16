@@ -362,6 +362,39 @@ canvas {
     padding: 8px 0;
 }
 
+
+.country-table {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.country-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-strong);
+}
+
+.country-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.country-name span {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.country-count {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
 /* --- Maintenance Page --- */
 .maintenance-body {
     display: flex;

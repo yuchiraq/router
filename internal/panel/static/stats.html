@@ -45,6 +45,13 @@
         </div>
 
         <div class="card">
+            <div class="card-header">Requests by Country</div>
+            <div class="card-body">
+                <div class="country-table" id="country-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-header">Disk Usage</div>
             <div class="card-body">
                 <div class="disk-table" id="disk-table"></div>
@@ -271,6 +278,19 @@
                                 });
 
                                 requestsChart.update();
+                            }
+
+                            if (data.countries) {
+                                var countryTable = document.getElementById('country-table');
+                                var countryRows = data.countries.map(function(country) {
+                                    return (
+                                        '<div class="country-row">' +
+                                            '<div class="country-name">' + country.name + ' <span>(' + country.code + ')</span></div>' +
+                                            '<div class="country-count">' + country.count + '</div>' +
+                                        '</div>'
+                                    );
+                                }).join('');
+                                countryTable.innerHTML = countryRows || '<div class="disk-empty">No country data yet.</div>';
                             }
 
                             if (data.disks) {

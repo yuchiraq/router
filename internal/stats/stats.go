@@ -1,4 +1,3 @@
-
 package stats
 
 import (
@@ -13,14 +12,15 @@ import (
 
 // Request represents a single request entry with its host
 type Request struct {
-	Time time.Time
-	Host string
+	Time    time.Time
+	Host    string
+	Country string
 }
 
 // Memory represents a single memory usage entry
 type Memory struct {
 	Time    time.Time
-	Used    uint64 // Used memory in MB
+	Used    uint64  // Used memory in MB
 	Percent float64 // Used memory in percentage
 }
 
@@ -43,28 +43,33 @@ type DiskUsage struct {
 
 // Stats holds the collected statistics
 type Stats struct {
-	mu       sync.RWMutex
-	requests []Request
-	memory   []Memory
-	cpu      []CPU
-	disks    []DiskUsage
+	mu           sync.RWMutex
+	requests     []Request
+	memory       []Memory
+	cpu          []CPU
+	disks        []DiskUsage
+	countryStats map[string]int
 }
 
 // New creates a new Stats instance
 func New() *Stats {
 	return &Stats{
-		requests: make([]Request, 0, 10000), // Pre-allocate for performance
-		memory:   make([]Memory, 0, 1000),   // Pre-allocate
-		cpu:      make([]CPU, 0, 1000),      // Pre-allocate
-		disks:    make([]DiskUsage, 0, 4000),
+		requests:     make([]Request, 0, 10000), // Pre-allocate for performance
+		memory:       make([]Memory, 0, 1000),   // Pre-allocate
+		cpu:          make([]CPU, 0, 1000),      // Pre-allocate
+		disks:        make([]DiskUsage, 0, 4000),
+		countryStats: make(map[string]int),
 	}
 }
 
-// AddRequest adds a new request to the stats, including the host
-func (s *Stats) AddRequest(host string) {
+// AddRequest adds a new request to the stats, including host and country.
+func (s *Stats) AddRequest(host, country string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.requests = append(s.requests, Request{Time: time.Now(), Host: host})
+
+	country = NormalizeCountry(country)
+	s.requests = append(s.requests, Request{Time: time.Now(), Host: host, Country: country})
+	s.countryStats[country]++
 }
 
 // RecordMemory records the current memory usage (both absolute and percentage)
@@ -79,7 +84,7 @@ func (s *Stats) RecordMemory() {
 	s.memory = append(s.memory, Memory{
 		Time:    time.Now(),
 		Used:    v.Used / 1024 / 1024, // Total system memory used in MB
-		Percent: v.UsedPercent,          // Total system memory used percentage
+		Percent: v.UsedPercent,        // Total system memory used percentage
 	})
 
 	// Optional: Keep memory slice from growing indefinitely

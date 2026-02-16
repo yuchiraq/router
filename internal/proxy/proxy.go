@@ -1,4 +1,3 @@
-
 package proxy
 
 import (
@@ -7,23 +6,24 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path/filepath"
 	"router/internal/stats"
 	"router/internal/storage"
 )
 
 // Proxy is a reverse proxy that uses a RuleStore to determine the target.
 type Proxy struct {
-	store             *storage.RuleStore
-	stats             *stats.Stats
-	maintenanceTmpl   *template.Template
+	store           *storage.RuleStore
+	stats           *stats.Stats
+	maintenanceTmpl *template.Template
 }
 
 // NewProxy creates a new Proxy.
 func NewProxy(store *storage.RuleStore, stats *stats.Stats) *Proxy {
 	maintenanceTmpl := template.Must(template.ParseFiles("internal/panel/templates/maintenance.html"))
 	return &Proxy{
-		store: store,
-		stats: stats,
+		store:           store,
+		stats:           stats,
 		maintenanceTmpl: maintenanceTmpl,
 	}
 }
@@ -31,6 +31,10 @@ func NewProxy(store *storage.RuleStore, stats *stats.Stats) *Proxy {
 // ServeHTTP handles the proxying of requests.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.store.MaintenanceMode {
+		if serveMaintenanceStatic(w, r) {
+			return
+		}
+
 		w.WriteHeader(http.StatusServiceUnavailable)
 		p.maintenanceTmpl.Execute(w, nil)
 		return
@@ -43,13 +47,17 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if rule.Maintenance {
+		if serveMaintenanceStatic(w, r) {
+			return
+		}
+
 		w.WriteHeader(http.StatusServiceUnavailable)
 		p.maintenanceTmpl.Execute(w, nil)
 		return
 	}
 
 	// Add request to stats with the specific host
-	p.stats.AddRequest(r.Host)
+	p.stats.AddRequest(r.Host, stats.CountryFromRequest(r))
 
 	targetURL, err := url.Parse("http://" + rule.Target)
 	if err != nil {
@@ -67,4 +75,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Host = targetURL.Host
 
 	proxy.ServeHTTP(w, r)
+}
+
+func serveMaintenanceStatic(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path != "/static/styles.css" {
+		return false
+	}
+
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return true
+	}
+
+	http.ServeFile(w, r, filepath.Clean("internal/panel/static/styles.css"))
+	return true
 }
