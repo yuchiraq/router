@@ -268,10 +268,18 @@
 
                             if (data.requests && data.requests.datasets) {
                                 requestsChart.data.labels = data.requests.labels;
-                                data.requests.datasets.forEach(function(newDataset) {
-                                    var existingDataset = requestsChart.data.datasets.find(function(d) {
-                                        return d.label === newDataset.label;
-                                    });
+
+                                for (var i = 0; i < data.requests.datasets.length; i++) {
+                                    var newDataset = data.requests.datasets[i];
+                                    var existingDataset = null;
+
+                                    for (var j = 0; j < requestsChart.data.datasets.length; j++) {
+                                        if (requestsChart.data.datasets[j].label === newDataset.label) {
+                                            existingDataset = requestsChart.data.datasets[j];
+                                            break;
+                                        }
+                                    }
+
                                     if (existingDataset) {
                                         existingDataset.data = newDataset.data;
                                     } else {
@@ -284,12 +292,23 @@
                                             fill: true
                                         });
                                     }
-                                });
-                                requestsChart.data.datasets = requestsChart.data.datasets.filter(function(d) {
-                                    return data.requests.datasets.some(function(nd) {
-                                        return nd.label === d.label;
-                                    });
-                                });
+                                }
+
+                                var filteredDatasets = [];
+                                for (var k = 0; k < requestsChart.data.datasets.length; k++) {
+                                    var current = requestsChart.data.datasets[k];
+                                    var found = false;
+                                    for (var n = 0; n < data.requests.datasets.length; n++) {
+                                        if (data.requests.datasets[n].label === current.label) {
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                    if (found) {
+                                        filteredDatasets.push(current);
+                                    }
+                                }
+                                requestsChart.data.datasets = filteredDatasets;
 
                                 requestsChart.update();
                             }
