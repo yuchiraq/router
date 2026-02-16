@@ -27,6 +27,7 @@ func main() {
 	stats.RecordMemory()
 	stats.RecordCPU()
 	stats.RecordDisks()
+	stats.RecordSSHConnections()
 
 	// Initialize log broadcaster
 	broadcaster := logstream.New()
@@ -38,6 +39,7 @@ func main() {
 			stats.RecordMemory()
 			stats.RecordCPU()
 			stats.RecordDisks()
+			stats.RecordSSHConnections()
 			time.Sleep(5 * time.Second)
 		}
 	}()

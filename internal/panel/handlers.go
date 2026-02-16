@@ -173,6 +173,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		h.stats.RecordMemory()
 		h.stats.RecordCPU()
 		h.stats.RecordDisks()
+		h.stats.RecordSSHConnections()
 		requestData := h.stats.GetRequestData()
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()

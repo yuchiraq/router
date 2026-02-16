@@ -1,6 +1,8 @@
 package stats
 
 import (
+	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -8,6 +10,7 @@ import (
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
+	netutil "github.com/shirou/gopsutil/net"
 )
 
 // Request represents a single request entry with its host
@@ -39,6 +42,13 @@ type DiskUsage struct {
 	UsedPercent float64
 	Free        uint64
 	Total       uint64
+}
+
+// SSHConnections represents a snapshot of SSH connections.
+type SSHConnections struct {
+	Time        time.Time
+	Established int
+	ByRemoteIP  map[string]int
 }
 
 // Stats holds the collected statistics
@@ -158,6 +168,107 @@ func (s *Stats) RecordDisks() {
 	s.disks = append(s.disks, entries...)
 	if len(s.disks) > 4000 {
 		s.disks = s.disks[len(s.disks)-4000:]
+	}
+}
+
+// RecordSSHConnections records current established SSH sessions on port 22.
+func (s *Stats) RecordSSHConnections() {
+	conns, err := netutil.Connections("tcp")
+	if err != nil {
+		return
+	}
+
+	remoteCounts := make(map[string]int)
+	established := 0
+
+	for _, conn := range conns {
+		if conn.Laddr.Port != 22 {
+			continue
+		}
+		if strings.ToUpper(conn.Status) != "ESTABLISHED" {
+			continue
+		}
+
+		established++
+		remoteIP := normalizeRemoteIP(conn.Raddr.IP)
+		if remoteIP != "" {
+			remoteCounts[remoteIP]++
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.ssh = append(s.ssh, SSHConnections{
+		Time:        time.Now(),
+		Established: established,
+		ByRemoteIP:  remoteCounts,
+	})
+
+	if len(s.ssh) > 1000 {
+		s.ssh = s.ssh[len(s.ssh)-1000:]
+	}
+}
+
+func normalizeRemoteIP(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	ip := net.ParseIP(raw)
+	if ip == nil {
+		return raw
+	}
+	return ip.String()
+}
+
+// GetSSHData returns SSH connection history and current remote IP table.
+func (s *Stats) GetSSHData() map[string]interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	labels := make([]string, len(s.ssh))
+	values := make([]int, len(s.ssh))
+
+	latestIPs := make(map[string]int)
+	if len(s.ssh) > 0 {
+		for ip, cnt := range s.ssh[len(s.ssh)-1].ByRemoteIP {
+			latestIPs[ip] = cnt
+		}
+	}
+
+	for i, sample := range s.ssh {
+		labels[i] = sample.Time.Format("15:04:05")
+		values[i] = sample.Established
+	}
+
+	ipRows := make([]map[string]interface{}, 0, len(latestIPs))
+	for ip, cnt := range latestIPs {
+		ipRows = append(ipRows, map[string]interface{}{
+			"ip":    ip,
+			"count": cnt,
+		})
+	}
+
+	sort.Slice(ipRows, func(i, j int) bool {
+		ci := ipRows[i]["count"].(int)
+		cj := ipRows[j]["count"].(int)
+		if ci == cj {
+			return ipRows[i]["ip"].(string) < ipRows[j]["ip"].(string)
+		}
+		return ci > cj
+	})
+
+	current := 0
+	if len(values) > 0 {
+		current = values[len(values)-1]
+	}
+
+	return map[string]interface{}{
+		"labels":  labels,
+		"values":  values,
+		"current": current,
+		"clients": ipRows,
 	}
 }
 
