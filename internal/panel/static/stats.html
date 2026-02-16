@@ -45,6 +45,22 @@
         </div>
 
         <div class="card">
+            <div class="card-header">SSH Connections</div>
+            <div class="card-body">
+                <div class="ssh-current" id="ssh-current">Current established: 0</div>
+                <canvas id="ssh-chart"></canvas>
+                <div class="ssh-table" id="ssh-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Requests by Country</div>
+            <div class="card-body">
+                <div class="country-table" id="country-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-header">Disk Usage</div>
             <div class="card-body">
                 <div class="disk-table" id="disk-table"></div>
@@ -56,8 +72,9 @@
                 var memoryCanvas = document.getElementById('memory-chart');
                 var cpuCanvas = document.getElementById('cpu-chart');
                 var requestsCanvas = document.getElementById('requests-chart');
+                var sshCanvas = document.getElementById('ssh-chart');
 
-                if (!memoryCanvas || !cpuCanvas || !requestsCanvas) {
+                if (!memoryCanvas || !cpuCanvas || !requestsCanvas || !sshCanvas) {
                     console.warn('Charts not initialized: missing canvas elements.');
                     return;
                 }
@@ -65,8 +82,9 @@
                 var memoryContext = memoryCanvas.getContext('2d');
                 var cpuContext = cpuCanvas.getContext('2d');
                 var requestsContext = requestsCanvas.getContext('2d');
+                var sshContext = sshCanvas.getContext('2d');
 
-                if (!memoryContext || !cpuContext || !requestsContext) {
+                if (!memoryContext || !cpuContext || !requestsContext || !sshContext) {
                     console.warn('Charts not initialized: missing canvas contexts.');
                     return;
                 }
@@ -223,6 +241,22 @@
                     options: chartOptions
                 });
 
+                
+                var sshChart = new Chart(sshContext, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Established SSH sessions',
+                            data: [],
+                            borderColor: '#BF5AF2',
+                            backgroundColor: 'rgba(191, 90, 242, 0.2)',
+                            fill: true
+                        }]
+                    },
+                    options: chartOptions
+                });
+
                 // --- Data Fetching ---
                 function fetchData() {
                     fetch('/stats/data', { credentials: 'same-origin' })
@@ -271,6 +305,40 @@
                                 });
 
                                 requestsChart.update();
+                            }
+
+
+                            if (data.ssh) {
+                                sshChart.data.labels = data.ssh.labels || [];
+                                sshChart.data.datasets[0].data = data.ssh.values || [];
+                                sshChart.update();
+
+                                var sshCurrent = document.getElementById('ssh-current');
+                                sshCurrent.textContent = 'Current established: ' + (data.ssh.current || 0);
+
+                                var sshTable = document.getElementById('ssh-table');
+                                var sshRows = (data.ssh.clients || []).map(function(client) {
+                                    return (
+                                        '<div class="ssh-row">' +
+                                            '<div class="ssh-ip">' + client.ip + '</div>' +
+                                            '<div class="ssh-count">' + client.count + '</div>' +
+                                        '</div>'
+                                    );
+                                }).join('');
+                                sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH clients.</div>';
+                            }
+
+                            if (data.countries) {
+                                var countryTable = document.getElementById('country-table');
+                                var countryRows = data.countries.map(function(country) {
+                                    return (
+                                        '<div class="country-row">' +
+                                            '<div class="country-name">' + country.name + ' <span>(' + country.code + ')</span></div>' +
+                                            '<div class="country-count">' + country.count + '</div>' +
+                                        '</div>'
+                                    );
+                                }).join('');
+                                countryTable.innerHTML = countryRows || '<div class="disk-empty">No country data yet.</div>';
                             }
 
                             if (data.disks) {
