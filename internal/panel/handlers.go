@@ -84,7 +84,7 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 	}
 
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
-		clog.Errorf("Error executing template %s: %v", name, err)
+		log.Printf("Error executing template %s: %v", name, err)
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
