@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"log"
 	"net"
 	"sort"
 	"strings"
@@ -51,24 +52,30 @@ type SSHConnections struct {
 	ByRemoteIP  map[string]int
 }
 
+type connectionFetcher func(kind string) ([]netutil.ConnectionStat, error)
+
 // Stats holds the collected statistics
 type Stats struct {
-	mu           sync.RWMutex
-	requests     []Request
-	memory       []Memory
-	cpu          []CPU
-	disks        []DiskUsage
-	countryStats map[string]int
+	mu              sync.RWMutex
+	requests        []Request
+	memory          []Memory
+	cpu             []CPU
+	disks           []DiskUsage
+	ssh             []SSHConnections
+	countryStats    map[string]int
+	listConnections connectionFetcher
 }
 
 // New creates a new Stats instance
 func New() *Stats {
 	return &Stats{
-		requests:     make([]Request, 0, 10000), // Pre-allocate for performance
-		memory:       make([]Memory, 0, 1000),   // Pre-allocate
-		cpu:          make([]CPU, 0, 1000),      // Pre-allocate
-		disks:        make([]DiskUsage, 0, 4000),
-		countryStats: make(map[string]int),
+		requests:        make([]Request, 0, 10000), // Pre-allocate for performance
+		memory:          make([]Memory, 0, 1000),   // Pre-allocate
+		cpu:             make([]CPU, 0, 1000),      // Pre-allocate
+		disks:           make([]DiskUsage, 0, 4000),
+		ssh:             make([]SSHConnections, 0, 1000),
+		countryStats:    make(map[string]int),
+		listConnections: netutil.Connections,
 	}
 }
 
@@ -173,13 +180,19 @@ func (s *Stats) RecordDisks() {
 
 // RecordSSHConnections records current established SSH sessions on port 22.
 func (s *Stats) RecordSSHConnections() {
-	conns, err := netutil.Connections("tcp")
-	if err != nil {
-		return
+	listConnections := s.listConnections
+	if listConnections == nil {
+		listConnections = netutil.Connections
 	}
 
+	conns, err := listConnections("tcp")
 	remoteCounts := make(map[string]int)
 	established := 0
+	if err != nil {
+		log.Printf("[WARN] Unable to collect SSH connections: %v", err)
+		s.appendSSHSample(0, remoteCounts)
+		return
+	}
 
 	for _, conn := range conns {
 		if conn.Laddr.Port != 22 {
@@ -196,6 +209,10 @@ func (s *Stats) RecordSSHConnections() {
 		}
 	}
 
+	s.appendSSHSample(established, remoteCounts)
+}
+
+func (s *Stats) appendSSHSample(established int, remoteCounts map[string]int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

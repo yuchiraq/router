@@ -45,6 +45,15 @@
         </div>
 
         <div class="card">
+            <div class="card-header">SSH Connections</div>
+            <div class="card-body">
+                <div class="ssh-current" id="ssh-current">Current established: 0</div>
+                <canvas id="ssh-chart"></canvas>
+                <div class="ssh-table" id="ssh-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-header">Requests by Country</div>
             <div class="card-body">
                 <div class="country-table" id="country-table"></div>
@@ -296,6 +305,27 @@
                                 });
 
                                 requestsChart.update();
+                            }
+
+
+                            if (data.ssh) {
+                                sshChart.data.labels = data.ssh.labels || [];
+                                sshChart.data.datasets[0].data = data.ssh.values || [];
+                                sshChart.update();
+
+                                var sshCurrent = document.getElementById('ssh-current');
+                                sshCurrent.textContent = 'Current established: ' + (data.ssh.current || 0);
+
+                                var sshTable = document.getElementById('ssh-table');
+                                var sshRows = (data.ssh.clients || []).map(function(client) {
+                                    return (
+                                        '<div class="ssh-row">' +
+                                            '<div class="ssh-ip">' + client.ip + '</div>' +
+                                            '<div class="ssh-count">' + client.count + '</div>' +
+                                        '</div>'
+                                    );
+                                }).join('');
+                                sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH clients.</div>';
                             }
 
                             if (data.countries) {
