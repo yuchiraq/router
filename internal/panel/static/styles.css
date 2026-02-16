@@ -362,6 +362,85 @@ canvas {
     padding: 8px 0;
 }
 
+
+.country-table {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.country-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-strong);
+}
+
+.country-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.country-name span {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.country-count {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+
+.ssh-current {
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.ssh-table {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.ssh-table-head,
+.ssh-row {
+    display: grid;
+    grid-template-columns: 1.3fr 1.2fr 1fr 0.8fr 1.2fr;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-strong);
+}
+
+.ssh-table-head {
+    margin-top: 8px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.ssh-ip,
+.ssh-date,
+.ssh-time {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.ssh-country,
+.ssh-device {
+    color: var(--text-primary);
+}
+
 /* --- Maintenance Page --- */
 .maintenance-body {
     display: flex;
