@@ -319,52 +319,53 @@
                                 sshCurrent.textContent = 'Current established: ' + (data.ssh.current || 0);
 
                                 var sshTable = document.getElementById('ssh-table');
-                                var sshRows = (data.ssh.sessions || []).map(function(session) {
-                                    return (
-                                        '<div class="ssh-row">' +
-                                            '<div class="ssh-ip">' + session.ip + ':' + session.port + '</div>' +
-                                            '<div class="ssh-country">' + session.countryName + ' (' + session.countryCode + ')</div>' +
-                                            '<div class="ssh-date">' + session.date + '</div>' +
-                                            '<div class="ssh-time">' + session.time + '</div>' +
-                                            '<div class="ssh-device">' + session.device + '</div>' +
-                                        '</div>'
-                                    );
-                                }).join('');
+                                var sshSessions = data.ssh.sessions || [];
+                                var sshRows = '';
+                                for (var si = 0; si < sshSessions.length; si++) {
+                                    var session = sshSessions[si];
+                                    sshRows += '<div class="ssh-row">' +
+                                        '<div class="ssh-ip">' + session.ip + ':' + session.port + '</div>' +
+                                        '<div class="ssh-country">' + session.countryName + ' (' + session.countryCode + ')</div>' +
+                                        '<div class="ssh-date">' + session.date + '</div>' +
+                                        '<div class="ssh-time">' + session.time + '</div>' +
+                                        '<div class="ssh-device">' + session.device + '</div>' +
+                                    '</div>';
+                                }
                                 sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH sessions.</div>';
                             }
 
                             if (data.countries) {
                                 var countryTable = document.getElementById('country-table');
-                                var countryRows = data.countries.map(function(country) {
-                                    return (
-                                        '<div class="country-row">' +
-                                            '<div class="country-name">' + country.name + ' <span>(' + country.code + ')</span></div>' +
-                                            '<div class="country-count">' + country.count + '</div>' +
-                                        '</div>'
-                                    );
-                                }).join('');
+                                var countryRows = '';
+                                for (var ci = 0; ci < data.countries.length; ci++) {
+                                    var country = data.countries[ci];
+                                    countryRows += '<div class="country-row">' +
+                                        '<div class="country-name">' + country.name + ' <span>(' + country.code + ')</span></div>' +
+                                        '<div class="country-count">' + country.count + '</div>' +
+                                    '</div>';
+                                }
                                 countryTable.innerHTML = countryRows || '<div class="disk-empty">No country data yet.</div>';
                             }
 
                             if (data.disks) {
                                 var table = document.getElementById('disk-table');
-                                var rows = data.disks.map(function(disk) {
-                                    return (
-                                        '<div class="disk-row">' +
-                                            '<div class="disk-main">' +
-                                                '<div class="disk-title">' + disk.mountpoint + '</div>' +
-                                                '<div class="disk-subtitle">' + disk.device + ' • ' + disk.fstype + '</div>' +
-                                            '</div>' +
-                                            '<div class="disk-metrics">' +
-                                                '<div><strong>' + disk.usedPercent.toFixed(1) + '%</strong> used</div>' +
-                                                '<div>' + disk.freeGB.toFixed(1) + ' GB free / ' + disk.totalGB.toFixed(1) + ' GB total</div>' +
-                                            '</div>' +
-                                            '<div class="disk-bar">' +
-                                                '<div class="disk-bar-fill" style="width: ' + disk.usedPercent.toFixed(1) + '%"></div>' +
-                                            '</div>' +
-                                        '</div>'
-                                    );
-                                }).join('');
+                                var rows = '';
+                                for (var di = 0; di < data.disks.length; di++) {
+                                    var disk = data.disks[di];
+                                    rows += '<div class="disk-row">' +
+                                        '<div class="disk-main">' +
+                                            '<div class="disk-title">' + disk.mountpoint + '</div>' +
+                                            '<div class="disk-subtitle">' + disk.device + ' • ' + disk.fstype + '</div>' +
+                                        '</div>' +
+                                        '<div class="disk-metrics">' +
+                                            '<div><strong>' + disk.usedPercent.toFixed(1) + '%</strong> used</div>' +
+                                            '<div>' + disk.freeGB.toFixed(1) + ' GB free / ' + disk.totalGB.toFixed(1) + ' GB total</div>' +
+                                        '</div>' +
+                                        '<div class="disk-bar">' +
+                                            '<div class="disk-bar-fill" style="width: ' + disk.usedPercent.toFixed(1) + '%"></div>' +
+                                        '</div>' +
+                                    '</div>';
+                                }
                                 table.innerHTML = rows || '<div class="disk-empty">No disks found.</div>';
                             }
                         })
