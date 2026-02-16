@@ -395,40 +395,6 @@ canvas {
     color: var(--text-primary);
 }
 
-
-.ssh-current {
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 12px;
-}
-
-.ssh-table {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 14px;
-}
-
-.ssh-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    background: var(--surface-strong);
-}
-
-.ssh-ip {
-    font-family: var(--font-mono);
-    color: var(--text-primary);
-}
-
-.ssh-count {
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
 /* --- Maintenance Page --- */
 .maintenance-body {
     display: flex;

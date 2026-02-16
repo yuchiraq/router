@@ -6,7 +6,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"path/filepath"
-	"router/internal/clog"
 	"router/internal/stats"
 	"router/internal/storage"
 )
@@ -31,7 +30,6 @@ func NewProxy(store *storage.RuleStore, stats *stats.Stats) *Proxy {
 // ServeHTTP handles the proxying of requests.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.store.MaintenanceMode {
-		clog.Infof("[maintenance-global] %s %s host=%s", r.Method, r.URL.Path, r.Host)
 		if serveMaintenanceStatic(w, r) {
 			return
 		}
@@ -49,7 +47,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if rule.Maintenance {
-		clog.Infof("[maintenance-rule] %s %s host=%s", r.Method, r.URL.Path, r.Host)
 		if serveMaintenanceStatic(w, r) {
 			return
 		}

@@ -84,7 +84,7 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 	}
 
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
-		clog.Errorf("Error executing template %s: %v", name, err)
+		log.Printf("Error executing template %s: %v", name, err)
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
@@ -179,7 +179,6 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
 		diskData := h.stats.GetDiskData()
 		countryData := h.stats.GetCountryData()
-		sshData := h.stats.GetSSHData()
 
 		data := map[string]interface{}{
 			"requests": requestData,
@@ -194,7 +193,6 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 			},
 			"disks":     diskData,
 			"countries": countryData,
-			"ssh":       sshData,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
