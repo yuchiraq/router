@@ -74,8 +74,9 @@
                 var memoryCanvas = document.getElementById('memory-chart');
                 var cpuCanvas = document.getElementById('cpu-chart');
                 var requestsCanvas = document.getElementById('requests-chart');
+                var sshCanvas = document.getElementById('ssh-chart');
 
-                if (!memoryCanvas || !cpuCanvas || !requestsCanvas) {
+                if (!memoryCanvas || !cpuCanvas || !requestsCanvas || !sshCanvas) {
                     console.warn('Charts not initialized: missing canvas elements.');
                     return;
                 }
@@ -83,8 +84,9 @@
                 var memoryContext = memoryCanvas.getContext('2d');
                 var cpuContext = cpuCanvas.getContext('2d');
                 var requestsContext = requestsCanvas.getContext('2d');
+                var sshContext = sshCanvas.getContext('2d');
 
-                if (!memoryContext || !cpuContext || !requestsContext) {
+                if (!memoryContext || !cpuContext || !requestsContext || !sshContext) {
                     console.warn('Charts not initialized: missing canvas contexts.');
                     return;
                 }
