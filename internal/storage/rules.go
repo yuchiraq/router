@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
+	"router/internal/clog"
 	"strings"
 	"sync"
 	"time"
@@ -21,9 +21,9 @@ type Rule struct {
 
 // RuleStore manages the routing rules
 type RuleStore struct {
-	mu      sync.RWMutex
-	rules   map[string]*Rule
-	storage *Storage
+	mu              sync.RWMutex
+	rules           map[string]*Rule
+	storage         *Storage
 	MaintenanceMode bool `json:"maintenanceMode"`
 }
 
@@ -36,7 +36,7 @@ func NewRuleStore(storage *Storage) *RuleStore {
 
 	loadedRules, maintenanceMode, err := storage.Load()
 	if err != nil {
-		log.Printf("Error loading rules: %v. Starting with a fresh rule set.", err)
+		clog.Warnf("Error loading rules: %v. Starting with a fresh rule set.", err)
 	} else {
 		// Only assign if the loaded map is not nil
 		if loadedRules != nil {
@@ -48,7 +48,6 @@ func NewRuleStore(storage *Storage) *RuleStore {
 	go rs.startHealthCheck()
 	return rs
 }
-
 
 // Add adds a new rule or updates an existing one
 func (s *RuleStore) Add(host, target string) {
@@ -116,10 +115,10 @@ func (s *RuleStore) HostPolicy(ctx context.Context, host string) error {
 
 // SetMaintenanceMode sets the maintenance mode status
 func (s *RuleStore) SetMaintenanceMode(enabled bool) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    s.MaintenanceMode = enabled
-    s.storage.Save(s.rules, s.MaintenanceMode) // Save the updated state
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.MaintenanceMode = enabled
+	s.storage.Save(s.rules, s.MaintenanceMode) // Save the updated state
 }
 
 // SetRuleMaintenance updates maintenance mode for a specific rule.
@@ -133,7 +132,6 @@ func (s *RuleStore) SetRuleMaintenance(host string, enabled bool) {
 	rule.Maintenance = enabled
 	s.storage.Save(s.rules, s.MaintenanceMode)
 }
-
 
 // startHealthCheck periodically checks the health of the services
 func (s *RuleStore) startHealthCheck() {
@@ -161,11 +159,11 @@ func (s *RuleStore) checkServices() {
 		// This is a simplified health check.
 		_, _, err := net.SplitHostPort(targetAddr)
 		if err != nil {
-			// If splitting fails, it might be because there's no port. 
+			// If splitting fails, it might be because there's no port.
 			// For a simple health check, we can just skip or assume a default port.
 			// For now, we'll log it and mark it as potentially down.
 			// A robust solution would be more complex.
-			log.Printf("Could not parse target for health check: %s. Assuming down.", rule.Target)
+			clog.Warnf("Could not parse target for health check: %s. Assuming down.", rule.Target)
 			rule.ServiceDown = true
 			continue
 		}
