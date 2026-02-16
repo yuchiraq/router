@@ -48,7 +48,9 @@
             <div class="card-header">SSH Connections</div>
             <div class="card-body">
                 <div class="ssh-current" id="ssh-current">Current established: 0</div>
-                <canvas id="ssh-chart"></canvas>
+                <div class="ssh-table ssh-table-head">
+                    <div>IP</div><div>Country</div><div>Date</div><div>Time</div><div>Device</div>
+                </div>
                 <div class="ssh-table" id="ssh-table"></div>
             </div>
         </div>
@@ -241,21 +243,6 @@
                     options: chartOptions
                 });
 
-                
-                var sshChart = new Chart(sshContext, {
-                    type: 'line',
-                    data: {
-                        labels: [],
-                        datasets: [{
-                            label: 'Established SSH sessions',
-                            data: [],
-                            borderColor: '#BF5AF2',
-                            backgroundColor: 'rgba(191, 90, 242, 0.2)',
-                            fill: true
-                        }]
-                    },
-                    options: chartOptions
-                });
 
                 // --- Data Fetching ---
                 function fetchData() {
@@ -309,23 +296,22 @@
 
 
                             if (data.ssh) {
-                                sshChart.data.labels = data.ssh.labels || [];
-                                sshChart.data.datasets[0].data = data.ssh.values || [];
-                                sshChart.update();
-
                                 var sshCurrent = document.getElementById('ssh-current');
                                 sshCurrent.textContent = 'Current established: ' + (data.ssh.current || 0);
 
                                 var sshTable = document.getElementById('ssh-table');
-                                var sshRows = (data.ssh.clients || []).map(function(client) {
+                                var sshRows = (data.ssh.sessions || []).map(function(session) {
                                     return (
                                         '<div class="ssh-row">' +
-                                            '<div class="ssh-ip">' + client.ip + '</div>' +
-                                            '<div class="ssh-count">' + client.count + '</div>' +
+                                            '<div class="ssh-ip">' + session.ip + ':' + session.port + '</div>' +
+                                            '<div class="ssh-country">' + session.countryName + ' (' + session.countryCode + ')</div>' +
+                                            '<div class="ssh-date">' + session.date + '</div>' +
+                                            '<div class="ssh-time">' + session.time + '</div>' +
+                                            '<div class="ssh-device">' + session.device + '</div>' +
                                         '</div>'
                                     );
                                 }).join('');
-                                sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH clients.</div>';
+                                sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH sessions.</div>';
                             }
 
                             if (data.countries) {

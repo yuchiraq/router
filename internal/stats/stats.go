@@ -1,9 +1,11 @@
 package stats
 
 import (
+	"context"
 	"log"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +54,16 @@ type SSHConnections struct {
 	ByRemoteIP  map[string]int
 }
 
+type sshSessionState struct {
+	RemoteIP    string
+	RemotePort  uint32
+	FirstSeen   time.Time
+	LastSeen    time.Time
+	CountryCode string
+	CountryName string
+	DeviceName  string
+}
+
 type connectionFetcher func(kind string) ([]netutil.ConnectionStat, error)
 
 // Stats holds the collected statistics
@@ -62,6 +74,8 @@ type Stats struct {
 	cpu             []CPU
 	disks           []DiskUsage
 	ssh             []SSHConnections
+	sshSessions     map[string]sshSessionState
+	deviceNames     map[string]string
 	countryStats    map[string]int
 	listConnections connectionFetcher
 }
@@ -74,6 +88,8 @@ func New() *Stats {
 		cpu:             make([]CPU, 0, 1000),      // Pre-allocate
 		disks:           make([]DiskUsage, 0, 4000),
 		ssh:             make([]SSHConnections, 0, 1000),
+		sshSessions:     make(map[string]sshSessionState),
+		deviceNames:     make(map[string]string),
 		countryStats:    make(map[string]int),
 		listConnections: netutil.Connections,
 	}
@@ -91,20 +107,17 @@ func (s *Stats) AddRequest(host, country string) {
 
 // RecordMemory records the current memory usage (both absolute and percentage)
 func (s *Stats) RecordMemory() {
-	// Get system memory stats
 	v, _ := mem.VirtualMemory()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Store total system memory usage
 	s.memory = append(s.memory, Memory{
 		Time:    time.Now(),
-		Used:    v.Used / 1024 / 1024, // Total system memory used in MB
-		Percent: v.UsedPercent,        // Total system memory used percentage
+		Used:    v.Used / 1024 / 1024,
+		Percent: v.UsedPercent,
 	})
 
-	// Optional: Keep memory slice from growing indefinitely
 	if len(s.memory) > 1000 {
 		s.memory = s.memory[len(s.memory)-1000:]
 	}
@@ -123,12 +136,7 @@ func (s *Stats) RecordCPU() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.cpu = append(s.cpu, CPU{
-		Time:    time.Now(),
-		Percent: percent[0],
-	})
-
-	// Optional: Keep CPU slice from growing indefinitely
+	s.cpu = append(s.cpu, CPU{Time: time.Now(), Percent: percent[0]})
 	if len(s.cpu) > 1000 {
 		s.cpu = s.cpu[len(s.cpu)-1000:]
 	}
@@ -154,15 +162,7 @@ func (s *Stats) RecordDisks() {
 		if err != nil {
 			continue
 		}
-		entries = append(entries, DiskUsage{
-			Time:        now,
-			Mountpoint:  partition.Mountpoint,
-			Device:      partition.Device,
-			Fstype:      partition.Fstype,
-			UsedPercent: usage.UsedPercent,
-			Free:        usage.Free,
-			Total:       usage.Total,
-		})
+		entries = append(entries, DiskUsage{Time: now, Mountpoint: partition.Mountpoint, Device: partition.Device, Fstype: partition.Fstype, UsedPercent: usage.UsedPercent, Free: usage.Free, Total: usage.Total})
 	}
 
 	if len(entries) == 0 {
@@ -187,41 +187,106 @@ func (s *Stats) RecordSSHConnections() {
 
 	conns, err := listConnections("tcp")
 	remoteCounts := make(map[string]int)
-	established := 0
+	now := time.Now()
 	if err != nil {
 		log.Printf("[WARN] Unable to collect SSH connections: %v", err)
 		s.appendSSHSample(0, remoteCounts)
+		s.pruneSSHSessions(map[string]sshSessionState{})
 		return
 	}
 
+	detected := make(map[string]sshSessionState)
 	for _, conn := range conns {
-		if conn.Laddr.Port != 22 {
+		if conn.Laddr.Port != 22 || strings.ToUpper(conn.Status) != "ESTABLISHED" {
 			continue
 		}
-		if strings.ToUpper(conn.Status) != "ESTABLISHED" {
-			continue
-		}
-
-		established++
 		remoteIP := normalizeRemoteIP(conn.Raddr.IP)
-		if remoteIP != "" {
-			remoteCounts[remoteIP]++
+		if remoteIP == "" {
+			continue
 		}
+		remoteCounts[remoteIP]++
+		key := sshSessionKey(remoteIP, conn.Raddr.Port)
+		detected[key] = sshSessionState{RemoteIP: remoteIP, RemotePort: conn.Raddr.Port, LastSeen: now}
 	}
 
-	s.appendSSHSample(established, remoteCounts)
+	s.mergeSSHSessions(now, detected)
+	s.appendSSHSample(len(detected), remoteCounts)
+}
+
+func sshSessionKey(remoteIP string, remotePort uint32) string {
+	return remoteIP + ":" + strconv.FormatUint(uint64(remotePort), 10)
+}
+
+func (s *Stats) mergeSSHSessions(now time.Time, detected map[string]sshSessionState) {
+	s.mu.RLock()
+	existingSessions := make(map[string]sshSessionState, len(s.sshSessions))
+	for key, session := range s.sshSessions {
+		existingSessions[key] = session
+	}
+	deviceCache := make(map[string]string, len(s.deviceNames))
+	for ip, name := range s.deviceNames {
+		deviceCache[ip] = name
+	}
+	s.mu.RUnlock()
+
+	for key, session := range detected {
+		if old, ok := existingSessions[key]; ok {
+			session.FirstSeen = old.FirstSeen
+			session.CountryCode = old.CountryCode
+			session.CountryName = old.CountryName
+			session.DeviceName = old.DeviceName
+		} else {
+			session.FirstSeen = now
+			countryCode := CountryFromIP(session.RemoteIP)
+			session.CountryCode = countryCode
+			session.CountryName = countryName(countryCode)
+			if cached, ok := deviceCache[session.RemoteIP]; ok {
+				session.DeviceName = cached
+			} else {
+				resolved := resolveDeviceName(session.RemoteIP)
+				deviceCache[session.RemoteIP] = resolved
+				session.DeviceName = resolved
+			}
+		}
+		session.LastSeen = now
+		detected[key] = session
+	}
+
+	s.pruneSSHSessions(detected)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for ip, name := range deviceCache {
+		s.deviceNames[ip] = name
+	}
+}
+
+func (s *Stats) pruneSSHSessions(active map[string]sshSessionState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sshSessions = active
+}
+
+func resolveDeviceName(ip string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	names, err := net.DefaultResolver.LookupAddr(ctx, ip)
+	if err != nil || len(names) == 0 {
+		return "Unknown device"
+	}
+	name := strings.TrimSuffix(strings.TrimSpace(names[0]), ".")
+	if name == "" {
+		return "Unknown device"
+	}
+	return name
 }
 
 func (s *Stats) appendSSHSample(established int, remoteCounts map[string]int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.ssh = append(s.ssh, SSHConnections{
-		Time:        time.Now(),
-		Established: established,
-		ByRemoteIP:  remoteCounts,
-	})
-
+	s.ssh = append(s.ssh, SSHConnections{Time: time.Now(), Established: established, ByRemoteIP: remoteCounts})
 	if len(s.ssh) > 1000 {
 		s.ssh = s.ssh[len(s.ssh)-1000:]
 	}
@@ -239,53 +304,42 @@ func normalizeRemoteIP(raw string) string {
 	return ip.String()
 }
 
-// GetSSHData returns SSH connection history and current remote IP table.
+// GetSSHData returns only currently active SSH sessions and connection metadata.
 func (s *Stats) GetSSHData() map[string]interface{} {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	sessions := make([]sshSessionState, 0, len(s.sshSessions))
+	for _, session := range s.sshSessions {
+		sessions = append(sessions, session)
+	}
+	s.mu.RUnlock()
 
-	labels := make([]string, len(s.ssh))
-	values := make([]int, len(s.ssh))
-
-	latestIPs := make(map[string]int)
-	if len(s.ssh) > 0 {
-		for ip, cnt := range s.ssh[len(s.ssh)-1].ByRemoteIP {
-			latestIPs[ip] = cnt
+	sort.Slice(sessions, func(i, j int) bool {
+		if sessions[i].FirstSeen.Equal(sessions[j].FirstSeen) {
+			if sessions[i].RemoteIP == sessions[j].RemoteIP {
+				return sessions[i].RemotePort < sessions[j].RemotePort
+			}
+			return sessions[i].RemoteIP < sessions[j].RemoteIP
 		}
-	}
+		return sessions[i].FirstSeen.Before(sessions[j].FirstSeen)
+	})
 
-	for i, sample := range s.ssh {
-		labels[i] = sample.Time.Format("15:04:05")
-		values[i] = sample.Established
-	}
-
-	ipRows := make([]map[string]interface{}, 0, len(latestIPs))
-	for ip, cnt := range latestIPs {
-		ipRows = append(ipRows, map[string]interface{}{
-			"ip":    ip,
-			"count": cnt,
+	rows := make([]map[string]interface{}, 0, len(sessions))
+	for _, session := range sessions {
+		rows = append(rows, map[string]interface{}{
+			"ip":          session.RemoteIP,
+			"port":        session.RemotePort,
+			"countryCode": session.CountryCode,
+			"countryName": session.CountryName,
+			"device":      session.DeviceName,
+			"connectedAt": session.FirstSeen.Format("2006-01-02 15:04:05"),
+			"date":        session.FirstSeen.Format("2006-01-02"),
+			"time":        session.FirstSeen.Format("15:04:05"),
 		})
 	}
 
-	sort.Slice(ipRows, func(i, j int) bool {
-		ci := ipRows[i]["count"].(int)
-		cj := ipRows[j]["count"].(int)
-		if ci == cj {
-			return ipRows[i]["ip"].(string) < ipRows[j]["ip"].(string)
-		}
-		return ci > cj
-	})
-
-	current := 0
-	if len(values) > 0 {
-		current = values[len(values)-1]
-	}
-
 	return map[string]interface{}{
-		"labels":  labels,
-		"values":  values,
-		"current": current,
-		"clients": ipRows,
+		"current":  len(rows),
+		"sessions": rows,
 	}
 }
 
@@ -295,7 +349,6 @@ func (s *Stats) GetDiskData() []map[string]interface{} {
 	defer s.mu.RUnlock()
 
 	latestByMount := make(map[string]DiskUsage)
-
 	for _, entry := range s.disks {
 		latestByMount[entry.Mountpoint] = entry
 	}
@@ -320,48 +373,51 @@ func (s *Stats) GetRequestData() map[string]interface{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	datasets := make(map[string]map[int]int)
-	hosts := []string{}
-	now := time.Now()
+	hourlyData := make(map[string]map[string]int)
+	hostsMap := make(map[string]bool)
 
-	// Aggregate requests by host and hour
-	for _, r := range s.requests {
-		if r.Time.After(now.Add(-24 * time.Hour)) {
-			if _, ok := datasets[r.Host]; !ok {
-				datasets[r.Host] = make(map[int]int)
-				hosts = append(hosts, r.Host)
-			}
-			datasets[r.Host][r.Time.Hour()]++
+	for _, req := range s.requests {
+		hour := req.Time.Format("2006-01-02 15:00")
+		if _, ok := hourlyData[hour]; !ok {
+			hourlyData[hour] = make(map[string]int)
 		}
+		hourlyData[hour][req.Host]++
+		hostsMap[req.Host] = true
 	}
 
-	// Prepare data for Chart.js
-	chartData := make(map[string]interface{})
-	labels := []string{}
-	for i := 0; i < 24; i++ {
-		hour := (now.Hour() - (23 - i) + 24) % 24
-		labels = append(labels, time.Date(0, 0, 0, hour, 0, 0, 0, time.UTC).Format("15:04"))
+	labels := make([]string, 0, len(hourlyData))
+	for hour := range hourlyData {
+		labels = append(labels, hour)
 	}
-	chartData["labels"] = labels
+	sort.Strings(labels)
 
-	chartDatasets := []interface{}{}
+	hosts := make([]string, 0, len(hostsMap))
+	for host := range hostsMap {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+
+	datasets := []map[string]interface{}{}
 	for _, host := range hosts {
-		values := []int{}
-		for i := 0; i < 24; i++ {
-			hour := (now.Hour() - (23 - i) + 24) % 24
-			values = append(values, datasets[host][hour])
+		data := make([]int, len(labels))
+		for i, hour := range labels {
+			if count, ok := hourlyData[hour][host]; ok {
+				data[i] = count
+			}
 		}
-		chartDatasets = append(chartDatasets, map[string]interface{}{
+		datasets = append(datasets, map[string]interface{}{
 			"label": host,
-			"data":  values,
+			"data":  data,
 		})
 	}
-	chartData["datasets"] = chartDatasets
 
-	return chartData
+	return map[string]interface{}{
+		"labels":   labels,
+		"datasets": datasets,
+	}
 }
 
-// GetMemoryData returns memory data for charting (absolute and percentage)
+// GetMemoryData returns labels, values, and percentages for memory usage
 func (s *Stats) GetMemoryData() ([]string, []uint64, []float64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -375,11 +431,10 @@ func (s *Stats) GetMemoryData() ([]string, []uint64, []float64) {
 		values[i] = m.Used
 		percents[i] = m.Percent
 	}
-
 	return labels, values, percents
 }
 
-// GetCPUData returns CPU data for charting
+// GetCPUData returns labels and percentages for CPU usage
 func (s *Stats) GetCPUData() ([]string, []float64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -391,6 +446,5 @@ func (s *Stats) GetCPUData() ([]string, []float64) {
 		labels[i] = c.Time.Format("15:04:05")
 		percents[i] = c.Percent
 	}
-
 	return labels, percents
 }

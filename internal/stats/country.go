@@ -46,6 +46,26 @@ func (c *ipCountryCache) set(ip, code string, ttl time.Duration) {
 	c.items[ip] = cachedCountry{code: code, expiresAt: time.Now().Add(ttl)}
 }
 
+// CountryFromIP resolves country code by raw IP string.
+func CountryFromIP(ip string) string {
+	parsed := net.ParseIP(strings.TrimSpace(ip))
+	if parsed == nil {
+		return unknownCountryCode
+	}
+	if isLocalIP(parsed) {
+		return "LOCAL"
+	}
+
+	ipText := parsed.String()
+	if cached, ok := countryCache.get(ipText); ok {
+		return cached
+	}
+
+	code := lookupCountryByIP(ipText)
+	countryCache.set(ipText, code, 24*time.Hour)
+	return code
+}
+
 // CountryFromRequest resolves request country by headers and client IP.
 func CountryFromRequest(r *http.Request) string {
 	if r == nil {
