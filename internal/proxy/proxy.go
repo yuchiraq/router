@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"html/template"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -42,6 +41,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rule, ok := p.store.GetRule(r.Host)
 	if !ok {
+		clog.Warnf("[no-rule] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, r.RemoteAddr)
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
@@ -61,7 +61,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	targetURL, err := url.Parse("http://" + rule.Target)
 	if err != nil {
-		log.Printf("Error parsing target URL for host %s: %v", r.Host, err)
+		clog.Errorf("Error parsing target URL for host %s: %v", r.Host, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

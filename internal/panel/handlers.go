@@ -3,8 +3,8 @@ package panel
 import (
 	"encoding/json"
 	"html/template"
-	"log"
 	"net/http"
+	"router/internal/clog"
 
 	"github.com/gorilla/websocket"
 	"router/internal/logstream"
@@ -196,7 +196,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(data); err != nil {
-			log.Printf("Error encoding stats data: %v", err)
+			clog.Errorf("Error encoding stats data: %v", err)
 		}
 	}).ServeHTTP(w, r)
 }
@@ -206,7 +206,7 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("Failed to upgrade to websockets: %v", err)
+			clog.Errorf("Failed to upgrade to websockets: %v", err)
 			return
 		}
 		defer conn.Close()
