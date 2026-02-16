@@ -2,12 +2,12 @@ package main
 
 import (
 	"crypto/tls"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"router/internal/clog"
 	"router/internal/logstream"
 	"router/internal/panel"
 	"router/internal/proxy"
@@ -30,7 +30,7 @@ func main() {
 
 	// Initialize log broadcaster
 	broadcaster := logstream.New()
-	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
+	log.SetOutput(logstream.NewConsoleMux(os.Stderr, broadcaster))
 
 	// Start memory recording
 	go func() {
@@ -50,10 +50,10 @@ func main() {
 	go func() {
 		panelMux := http.NewServeMux()
 		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
-		
+
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
-    	panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
+		panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
 
 		panelMux.HandleFunc("/", panelHandler.Index)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
@@ -62,17 +62,15 @@ func main() {
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-		log.Println("Starting admin panel on :8162")
+		clog.Infof("Starting admin panel on :8162")
 		if err := http.ListenAndServe(":8162", panelMux); err != nil {
-			log.Fatalf("Failed to start admin panel: %v", err)
+			clog.Fatalf("Failed to start admin panel: %v", err)
 		}
 	}()
 
 	// --- Proxy (Ports 80 & 443) ---
 	proxyHandler := proxy.NewProxy(store, stats)
 	proxyMux := http.NewServeMux()
-	staticFS := http.FileServer(http.Dir("internal/panel/static"))
-	proxyMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
 	proxyMux.Handle("/", proxyHandler)
 
 	// Autocert for automatic HTTPS certificates
@@ -93,15 +91,15 @@ func main() {
 
 	// HTTP server (for ACME challenge and redirecting to HTTPS)
 	go func() {
-		log.Println("Starting HTTP server on :80")
+		clog.Infof("Starting HTTP server on :80")
 		if err := http.ListenAndServe(":80", certManager.HTTPHandler(nil)); err != nil {
-			log.Fatalf("HTTP server error: %v", err)
+			clog.Fatalf("HTTP server error: %v", err)
 		}
 	}()
 
 	// Start HTTPS server
-	log.Println("Starting HTTPS server on :443")
+	clog.Infof("Starting HTTPS server on :443")
 	if err := server.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("HTTPS server error: %v", err)
+		clog.Fatalf("HTTPS server error: %v", err)
 	}
 }

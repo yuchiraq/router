@@ -1,11 +1,10 @@
-
 package panel
 
 import (
 	"encoding/json"
 	"html/template"
-	"log"
 	"net/http"
+	"router/internal/clog"
 
 	"github.com/gorilla/websocket"
 	"router/internal/logstream"
@@ -85,8 +84,8 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 	}
 
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
-		log.Printf("Error executing template %s: %v", name, err)
-        http.Error(w, "Error rendering page", http.StatusInternalServerError)
+		clog.Errorf("Error executing template %s: %v", name, err)
+		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
 
@@ -178,6 +177,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
 		diskData := h.stats.GetDiskData()
+		countryData := h.stats.GetCountryData()
 
 		data := map[string]interface{}{
 			"requests": requestData,
@@ -190,12 +190,13 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 				"labels":   cpuLabels,
 				"percents": cpuPercents,
 			},
-			"disks": diskData,
+			"disks":     diskData,
+			"countries": countryData,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(data); err != nil {
-			log.Printf("Error encoding stats data: %v", err)
+			clog.Errorf("Error encoding stats data: %v", err)
 		}
 	}).ServeHTTP(w, r)
 }
@@ -205,7 +206,7 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("Failed to upgrade to websockets: %v", err)
+			clog.Errorf("Failed to upgrade to websockets: %v", err)
 			return
 		}
 		defer conn.Close()
