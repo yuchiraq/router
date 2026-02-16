@@ -84,7 +84,7 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 	}
 
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
-		log.Printf("[ERROR] Error executing template %s: %v", name, err)
+		clog.Errorf("Error executing template %s: %v", name, err)
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
@@ -199,7 +199,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(data); err != nil {
-			log.Printf("[ERROR] Error encoding stats data: %v", err)
+			clog.Errorf("Error encoding stats data: %v", err)
 		}
 	}).ServeHTTP(w, r)
 }
@@ -209,7 +209,7 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("[ERROR] Failed to upgrade to websockets: %v", err)
+			clog.Errorf("Failed to upgrade to websockets: %v", err)
 			return
 		}
 		defer conn.Close()

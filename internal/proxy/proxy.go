@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"path/filepath"
+	"router/internal/clog"
 	"router/internal/stats"
 	"router/internal/storage"
 )
@@ -30,7 +31,7 @@ func NewProxy(store *storage.RuleStore, stats *stats.Stats) *Proxy {
 // ServeHTTP handles the proxying of requests.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.store.MaintenanceMode {
-		log.Printf("[INFO] [maintenance-global] %s %s host=%s", r.Method, r.URL.Path, r.Host)
+		clog.Infof("[maintenance-global] %s %s host=%s", r.Method, r.URL.Path, r.Host)
 		if serveMaintenanceStatic(w, r) {
 			return
 		}
@@ -42,13 +43,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rule, ok := p.store.GetRule(r.Host)
 	if !ok {
-		log.Printf("[WARN] [no-rule] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, r.RemoteAddr)
+		clog.Warnf("[no-rule] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, r.RemoteAddr)
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
 
 	if rule.Maintenance {
-		log.Printf("[INFO] [maintenance-rule] %s %s host=%s", r.Method, r.URL.Path, r.Host)
+		clog.Infof("[maintenance-rule] %s %s host=%s", r.Method, r.URL.Path, r.Host)
 		if serveMaintenanceStatic(w, r) {
 			return
 		}
@@ -63,7 +64,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	targetURL, err := url.Parse("http://" + rule.Target)
 	if err != nil {
-		log.Printf("[ERROR] Error parsing target URL for host %s: %v", r.Host, err)
+		clog.Errorf("Error parsing target URL for host %s: %v", r.Host, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
