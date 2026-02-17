@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"net/url"
 	"router/internal/clog"
+	"strings"
 
 	"router/internal/logstream"
 	"router/internal/stats"
@@ -15,7 +17,22 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all connections
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // non-browser clients
+		}
+
+		originURL, err := url.Parse(origin)
+		if err != nil {
+			return false
+		}
+
+		host := r.Host
+		if host == "" {
+			return false
+		}
+
+		return strings.EqualFold(originURL.Host, host)
 	},
 }
 
@@ -27,10 +44,11 @@ type Handler struct {
 	templates   map[string]*template.Template
 	stats       *stats.Stats
 	broadcaster *logstream.Broadcaster
+	ipStore     *storage.IPReputationStore
 }
 
 // NewHandler creates a new panel handler
-func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
+func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore) *Handler {
 	templates := make(map[string]*template.Template)
 
 	// Parse templates
@@ -49,6 +67,7 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		templates:   templates,
 		stats:       stats,
 		broadcaster: broadcaster,
+		ipStore:     ipStore,
 	}
 }
 
@@ -170,37 +189,44 @@ func (h *Handler) RuleMaintenance(w http.ResponseWriter, r *http.Request) {
 
 // StatsData provides stats data as JSON
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
-	h.stats.RecordMemory()
-	h.stats.RecordCPU()
-	h.stats.RecordDisks()
-	h.stats.RecordSSHConnections()
-	requestData := h.stats.GetRequestData()
-	memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
-	cpuLabels, cpuPercents := h.stats.GetCPUData()
-	diskData := h.stats.GetDiskData()
-	countryData := h.stats.GetCountryData()
-	sshData := h.stats.GetSSHData()
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		h.stats.RecordMemory()
+		h.stats.RecordCPU()
+		h.stats.RecordDisks()
+		h.stats.RecordSSHConnections()
+		suspicious := []storage.SuspiciousIP{}
+		if h.ipStore != nil {
+			suspicious = h.ipStore.List()
+		}
+		requestData := h.stats.GetRequestData()
+		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
+		cpuLabels, cpuPercents := h.stats.GetCPUData()
+		diskData := h.stats.GetDiskData()
+		countryData := h.stats.GetCountryData()
+		sshData := h.stats.GetSSHData()
 
-	data := map[string]interface{}{
-		"requests": requestData,
-		"memory": map[string]interface{}{
-			"labels":   memoryLabels,
-			"values":   memoryValues,
-			"percents": memoryPercents,
-		},
-		"cpu": map[string]interface{}{
-			"labels":   cpuLabels,
-			"percents": cpuPercents,
-		},
-		"disks":     diskData,
-		"countries": countryData,
-		"ssh":       sshData,
-	}
+		data := map[string]interface{}{
+			"requests": requestData,
+			"memory": map[string]interface{}{
+				"labels":   memoryLabels,
+				"values":   memoryValues,
+				"percents": memoryPercents,
+			},
+			"cpu": map[string]interface{}{
+				"labels":   cpuLabels,
+				"percents": cpuPercents,
+			},
+			"disks":      diskData,
+			"countries":  countryData,
+			"ssh":        sshData,
+			"suspicious": suspicious,
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		clog.Errorf("Error encoding stats data: %v", err)
-	}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(data); err != nil {
+			clog.Errorf("Error encoding stats data: %v", err)
+		}
+	}).ServeHTTP(w, r)
 }
 
 // Logs handles the websocket connection for logs
@@ -222,5 +248,26 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+	}).ServeHTTP(w, r)
+}
+
+// BanSuspiciousIP bans suspicious IP manually from admin panel.
+func (h *Handler) BanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		h.ipStore.Ban(ip)
+		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)
 }
