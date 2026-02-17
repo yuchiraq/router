@@ -1,13 +1,10 @@
 package panel
 
 import (
+	"encoding/json"
 	"html/template"
 	"net/http"
-<<<<<<< HEAD
 	"router/internal/clog"
-=======
-	"path/filepath"
->>>>>>> main
 
 	"router/internal/logstream"
 	"router/internal/stats"
@@ -24,10 +21,9 @@ type Handler struct {
 	stats       *stats.Stats
 	broadcaster *logstream.Broadcaster
 	// templates   *template.Template
-	upgrader    websocket.Upgrader
+	upgrader websocket.Upgrader
 }
 
-<<<<<<< HEAD
 // NewHandler creates a new panel handler
 func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
 	templates := make(map[string]*template.Template)
@@ -41,10 +37,6 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		"internal/panel/templates/maintenance.html",
 	))
 
-=======
-// NewHandler creates a new Handler
-func NewHandler(store *storage.RuleStore, user, pass string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
->>>>>>> main
 	return &Handler{
 		store:       store,
 		user:        user,
@@ -66,20 +58,8 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 		"Data": data,
 	}
 
-<<<<<<< HEAD
 	if err := tmpl.ExecuteTemplate(w, "layout", templateData); err != nil {
 		clog.Errorf("Error executing template %s: %v", name, err)
-=======
-	tmpl, err := template.ParseFiles(filepath.Join("internal", "panel", "templates", "layout.html"), filepath.Join("internal", "panel", "templates", name+".html"))
-	if err != nil {
-		log.Printf("Error parsing template %s: %v", name, err)
-		http.Error(w, "Error rendering page", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.ExecuteTemplate(w, "layout.html", templateData); err != nil {
-		log.Printf("Error executing template %s: %v", name, err)
->>>>>>> main
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
@@ -105,7 +85,6 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 
 // Index is the handler for the dashboard page
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
-<<<<<<< HEAD
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			maintenance := r.FormValue("maintenance") == "on"
@@ -120,13 +99,6 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 		}
 		h.render(w, r, "index", data)
 	}).ServeHTTP(w, r)
-=======
-	data := map[string]interface{}{
-		"Rules":           h.store.All(),
-		"MaintenanceMode": h.store.IsMaintenanceMode(),
-	}
-	h.render(w, r, "index", data)
->>>>>>> main
 }
 
 // AddRule is the handler for adding a new routing rule
@@ -165,7 +137,6 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/", http.StatusFound)
 }
 
-<<<<<<< HEAD
 // RuleMaintenance toggles maintenance mode for a specific rule.
 func (h *Handler) RuleMaintenance(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -217,21 +188,10 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		clog.Errorf("Error encoding stats data: %v", err)
 	}
-=======
-// Stats is the handler for the stats page
-func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "stats", nil)
-}
-
-// StatsData is the handler for providing stats data via SSE
-func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
-	// Implementation for SSE with stats data
->>>>>>> main
 }
 
 // Logs is the handler for the logs WebSocket
 func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
-<<<<<<< HEAD
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -250,24 +210,4 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}).ServeHTTP(w, r)
-=======
-	// Implementation for WebSocket with logs
-}
-
-// ToggleMaintenance is the handler for toggling maintenance mode
-func (h *Handler) ToggleMaintenance(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	enabled := r.FormValue("maintenance") == "on"
-	h.store.SetMaintenanceMode(enabled)
-	http.Redirect(w, r, "/admin/", http.StatusFound)
-}
-
-// Maintenance is the handler for the maintenance page
-func (h *Handler) Maintenance(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "maintenance", nil)
->>>>>>> main
 }
