@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"router/internal/clog"
+	"strconv"
 	"strings"
 
 	"router/internal/logstream"
@@ -45,10 +46,11 @@ type Handler struct {
 	stats       *stats.Stats
 	broadcaster *logstream.Broadcaster
 	ipStore     *storage.IPReputationStore
+	backupStore *storage.BackupStore
 }
 
 // NewHandler creates a new panel handler
-func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore) *Handler {
+func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore, backupStore *storage.BackupStore) *Handler {
 	templates := make(map[string]*template.Template)
 
 	// Parse templates
@@ -68,6 +70,7 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		stats:       stats,
 		broadcaster: broadcaster,
 		ipStore:     ipStore,
+		backupStore: backupStore,
 	}
 }
 
@@ -131,6 +134,13 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "internal/panel/static/stats.html")
+	}).ServeHTTP(w, r)
+}
+
+// Backups serves backup management page.
+func (h *Handler) Backups(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "internal/panel/static/backups.html")
 	}).ServeHTTP(w, r)
 }
 
@@ -268,6 +278,119 @@ func (h *Handler) BanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.ipStore.Ban(ip)
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// UnbanSuspiciousIP removes IP from ban list manually from admin panel.
+func (h *Handler) UnbanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		h.ipStore.Unban(ip)
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// RemoveSuspiciousIP deletes IP from suspicious list manually from admin panel.
+func (h *Handler) RemoveSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		h.ipStore.Remove(ip)
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// BackupsData returns backup config and existing archives.
+func (h *Handler) BackupsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg, entries, lastError := h.backupStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"config":    cfg,
+			"entries":   entries,
+			"lastError": lastError,
+		})
+	}).ServeHTTP(w, r)
+}
+
+// SaveBackupsConfig updates backup settings.
+func (h *Handler) SaveBackupsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+
+		sourcesRaw := r.FormValue("sources")
+		sources := []string{}
+		for _, line := range strings.Split(sourcesRaw, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				sources = append(sources, line)
+			}
+		}
+
+		interval, _ := strconv.Atoi(r.FormValue("intervalMinutes"))
+		keep, _ := strconv.Atoi(r.FormValue("keepCopies"))
+
+		h.backupStore.UpdateConfig(storage.BackupConfig{
+			Sources:         sources,
+			DestinationDir:  strings.TrimSpace(r.FormValue("destinationDir")),
+			IntervalMinutes: interval,
+			KeepCopies:      keep,
+			Enabled:         r.FormValue("enabled") == "on",
+		})
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// RunBackupNow starts backup immediately.
+func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		if err := h.backupStore.RunNow(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)
 }
