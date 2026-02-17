@@ -34,7 +34,7 @@ func NewProxy(store *storage.RuleStore, stats *stats.Stats, reputation *storage.
 
 // ServeHTTP handles the proxying of requests.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	remoteIP := clientIP(r.RemoteAddr)
+	remoteIP := clientIP(r)
 	if p.reputation != nil && p.reputation.IsBanned(remoteIP) {
 		clog.Warnf("[blocked-ip] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, remoteIP)
 		http.Error(w, "Forbidden", http.StatusForbidden)
@@ -92,8 +92,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Update the request headers
 	r.URL.Host = targetURL.Host
 	r.URL.Scheme = targetURL.Scheme
+	r.Header.Set("X-Real-IP", remoteIP)
 	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
+	r.Header.Set("X-Forwarded-For", appendForwardedFor(r.Header.Get("X-Forwarded-For"), remoteIP))
 	r.Host = targetURL.Host
+
+	clog.Infof("[proxy-forward] %s %s src=%s remote=%s xff=%q host=%s -> %s", r.Method, r.URL.Path, remoteIP, r.RemoteAddr, r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Forwarded-Host"), targetURL.Host)
 
 	proxy.ServeHTTP(w, r)
 }
@@ -112,12 +116,31 @@ func serveMaintenanceStatic(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func clientIP(remoteAddr string) string {
-	host, _, err := net.SplitHostPort(remoteAddr)
+func clientIP(r *http.Request) string {
+	for _, header := range []string{"CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For"} {
+		if v := strings.TrimSpace(r.Header.Get(header)); v != "" {
+			if header == "X-Forwarded-For" {
+				parts := strings.Split(v, ",")
+				if len(parts) > 0 {
+					return strings.TrimSpace(parts[0])
+				}
+			}
+			return v
+		}
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return remoteAddr
+		return r.RemoteAddr
 	}
 	return host
+}
+
+func appendForwardedFor(existing, remoteIP string) string {
+	if strings.TrimSpace(existing) == "" {
+		return remoteIP
+	}
+	return existing + ", " + remoteIP
 }
 
 func suspiciousPath(path string) bool {
