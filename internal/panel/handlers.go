@@ -292,3 +292,24 @@ func (h *Handler) UnbanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)
 }
+
+// RemoveSuspiciousIP deletes IP from suspicious list manually from admin panel.
+func (h *Handler) RemoveSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		h.ipStore.Remove(ip)
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}

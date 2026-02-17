@@ -59,3 +59,26 @@ func TestIPReputationStoreUnban(t *testing.T) {
 		t.Fatalf("expected persisted unbanned state")
 	}
 }
+
+func TestIPReputationStoreRemove(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ip_reputation.json")
+
+	store := NewIPReputationStore(path)
+	store.MarkSuspicious("9.8.7.6", "unknown host")
+	if len(store.List()) != 1 {
+		t.Fatalf("expected one entry before remove")
+	}
+
+	if !store.Remove("9.8.7.6") {
+		t.Fatalf("expected remove to succeed")
+	}
+	if len(store.List()) != 0 {
+		t.Fatalf("expected no entries after remove")
+	}
+
+	reloaded := NewIPReputationStore(path)
+	if len(reloaded.List()) != 0 {
+		t.Fatalf("expected remove to persist")
+	}
+}
