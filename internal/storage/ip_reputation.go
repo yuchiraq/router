@@ -117,6 +117,42 @@ func (s *IPReputationStore) Ban(ip string) bool {
 	return true
 }
 
+func (s *IPReputationStore) Unban(ip string) bool {
+	if ip == "" {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.entries[ip]
+	if !ok || !entry.Banned {
+		return false
+	}
+
+	entry.Banned = false
+	entry.BannedAt = time.Time{}
+	s.saveLocked()
+	return true
+}
+
+func (s *IPReputationStore) Remove(ip string) bool {
+	if ip == "" {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.entries[ip]; !ok {
+		return false
+	}
+
+	delete(s.entries, ip)
+	s.saveLocked()
+	return true
+}
+
 func (s *IPReputationStore) IsBanned(ip string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications - Router</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">Router</a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/stats">Stats</a>
+                <a href="/backups">Backups</a>
+                <a href="/notifications" class="active">Notifications</a>
+            </div>
+        </div>
+    </nav>
+    <main class="container">
+        <div class="header"><h1>Telegram Notifications</h1></div>
+
+        <div class="card">
+            <div class="card-header">Bot Connection</div>
+            <div class="card-body">
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <label><input type="checkbox" id="enabled"> Enable notifications</label>
+                </div>
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <input class="form-control" id="token" placeholder="Bot token (123456:ABC...)">
+                    <input class="form-control" id="chatId" placeholder="Chat ID (e.g. -1001234567890)">
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">What to Notify About</div>
+            <div class="card-body" id="events-box" style="display:grid; gap:8px;">
+                <label><input type="checkbox" data-event="unknown_host"> Unknown host requests</label>
+                <label><input type="checkbox" data-event="suspicious_probe"> Suspicious path probes</label>
+                <label><input type="checkbox" data-event="blocked_ip_hit"> Blocked IP hit attempts</label>
+                <label><input type="checkbox" data-event="manual_ban"> Manual ban actions</label>
+                <label><input type="checkbox" data-event="manual_unban"> Manual unban actions</label>
+                <label><input type="checkbox" data-event="manual_remove"> Manual suspicious IP removal</label>
+                <label><input type="checkbox" data-event="backup_success"> Backup success</label>
+                <label><input type="checkbox" data-event="backup_failure"> Backup failures</label>
+                <label><input type="checkbox" data-event="test"> Test messages</label>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Actions</div>
+            <div class="card-body">
+                <div class="form-inline">
+                    <button class="btn" id="save-btn" type="button">Save Notification Settings</button>
+                    <button class="btn" id="test-btn" type="button">Send Test Message</button>
+                </div>
+                <p id="status-msg" style="margin-top:12px;color:var(--text-secondary);"></p>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                function setStatus(text, isError) {
+                    var el = document.getElementById('status-msg');
+                    if (!el) return;
+                    el.textContent = text || '';
+                    el.style.color = isError ? 'var(--accent-red)' : 'var(--text-secondary)';
+                }
+
+                function loadData() {
+                    return fetch('/notifications/data', { credentials: 'same-origin' })
+                        .then(function (response) {
+                            if (!response.ok) throw new Error('failed to load notification settings');
+                            return response.json();
+                        })
+                        .then(function (data) {
+                            var cfg = data.config || {};
+                            var events = cfg.events || {};
+                            document.getElementById('enabled').checked = !!cfg.enabled;
+                            document.getElementById('token').value = cfg.token || '';
+                            document.getElementById('chatId').value = cfg.chatId || '';
+                            var checks = document.querySelectorAll('[data-event]');
+                            for (var i = 0; i < checks.length; i++) {
+                                var key = checks[i].getAttribute('data-event');
+                                checks[i].checked = !!events[key];
+                            }
+                        })
+                        .catch(function (e) { setStatus(e.message || String(e), true); });
+                }
+
+                function saveConfig() {
+                    var body = new URLSearchParams();
+                    body.set('enabled', document.getElementById('enabled').checked ? 'on' : '');
+                    body.set('token', document.getElementById('token').value.trim());
+                    body.set('chatId', document.getElementById('chatId').value.trim());
+                    var checks = document.querySelectorAll('[data-event]');
+                    for (var i = 0; i < checks.length; i++) {
+                        var key = checks[i].getAttribute('data-event');
+                        body.set('event_' + key, checks[i].checked ? 'on' : '');
+                    }
+                    return fetch('/notifications/config', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    }).then(function (response) {
+                        if (!response.ok) throw new Error('failed to save settings');
+                        setStatus('Notification settings saved.', false);
+                    });
+                }
+
+                function testNotify() {
+                    return fetch('/notifications/test', {
+                        method: 'POST',
+                        credentials: 'same-origin'
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            return response.text().then(function (t) { throw new Error(t || 'test failed'); });
+                        }
+                        setStatus('Test message sent.', false);
+                    });
+                }
+
+                document.getElementById('save-btn').addEventListener('click', function () {
+                    saveConfig().catch(function (e) { setStatus(e.message || String(e), true); });
+                });
+                document.getElementById('test-btn').addEventListener('click', function () {
+                    testNotify().catch(function (e) { setStatus(e.message || String(e), true); });
+                });
+
+                loadData();
+            })();
+        </script>
+    </main>
+</body>
+</html>
