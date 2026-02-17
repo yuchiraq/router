@@ -2,12 +2,12 @@ package main
 
 import (
 	"crypto/tls"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"router/internal/clog"
 	"router/internal/logstream"
 	"router/internal/panel"
 	"router/internal/proxy"
@@ -22,16 +22,23 @@ func main() {
 	store := storage.NewRuleStore(nil)
 
 	// Initialize stats
-	statistics := stats.New()
+	stats := stats.New()
+	stats.RecordMemory()
+	stats.RecordCPU()
+	stats.RecordDisks()
+	stats.RecordSSHConnections()
 
 	// Initialize log broadcaster
 	broadcaster := logstream.New()
-	log.SetOutput(io.MultiWriter(os.Stderr, broadcaster))
+	log.SetOutput(logstream.NewConsoleMux(os.Stderr, broadcaster))
 
 	// Start memory recording
 	go func() {
 		for {
-			statistics.RecordMemory()
+			stats.RecordMemory()
+			stats.RecordCPU()
+			stats.RecordDisks()
+			stats.RecordSSHConnections()
 			time.Sleep(5 * time.Second)
 		}
 	}()
@@ -43,7 +50,7 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, statistics, broadcaster)
+		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
@@ -54,15 +61,18 @@ func main() {
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
+		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-		log.Println("Starting admin panel on :8162")
+		clog.Infof("Starting admin panel on :8162")
 		if err := http.ListenAndServe(":8162", panelMux); err != nil {
-			log.Fatalf("Failed to start admin panel: %v", err)
+			clog.Fatalf("Failed to start admin panel: %v", err)
 		}
 	}()
 
 	// --- Proxy (Ports 80 & 443) ---
-	proxyHandler := proxy.NewProxy(store, statistics, broadcaster, "", nil)
+	proxyHandler := proxy.NewProxy(store, stats)
+	proxyMux := http.NewServeMux()
+	proxyMux.Handle("/", proxyHandler)
 
 	// Autocert for automatic HTTPS certificates
 	certManager := &autocert.Manager{
@@ -74,7 +84,7 @@ func main() {
 	// HTTPS server
 	server := &http.Server{
 		Addr:    ":443",
-		Handler: proxyHandler,
+		Handler: proxyMux,
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
 		},
@@ -82,15 +92,15 @@ func main() {
 
 	// HTTP server (for ACME challenge and redirecting to HTTPS)
 	go func() {
-		log.Println("Starting HTTP server on :80")
+		clog.Infof("Starting HTTP server on :80")
 		if err := http.ListenAndServe(":80", certManager.HTTPHandler(nil)); err != nil {
-			log.Fatalf("HTTP server error: %v", err)
+			clog.Fatalf("HTTP server error: %v", err)
 		}
 	}()
 
 	// Start HTTPS server
-	log.Println("Starting HTTPS server on :443")
+	clog.Infof("Starting HTTPS server on :443")
 	if err := server.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("HTTPS server error: %v", err)
+		clog.Fatalf("HTTPS server error: %v", err)
 	}
 }

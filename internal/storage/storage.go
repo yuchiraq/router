@@ -1,8 +1,8 @@
-
 package storage
 
 import (
-	"sync"
+	"encoding/json"
+	"os"
 )
 
 // Rule defines the structure for a routing rule
@@ -11,67 +11,55 @@ type Rule struct {
 	Target string `json:"target"`
 }
 
-// RuleStore holds the routing rules and maintenance mode status
-type RuleStore struct {
-	mu              sync.RWMutex
-	rules           map[string]string
-	maintenanceMode bool
+// storageData is the format of the data stored in the JSON file.
+type storageData struct {
+	Rules           map[string]*Rule `json:"rules"`
+	MaintenanceMode bool             `json:"maintenanceMode"`
 }
 
-// NewRuleStore creates a new RuleStore
-func NewRuleStore(initialRules map[string]string) *RuleStore {
-	if initialRules == nil {
-		initialRules = make(map[string]string)
-	}
-	return &RuleStore{
-		rules: initialRules,
-	}
+// NewStorage creates a new Storage instance.
+func NewStorage(filePath string) *Storage {
+	return &Storage{filePath: filePath}
 }
 
-// Add adds a new rule to the store
-func (s *RuleStore) Add(host, target string) {
+// Load reads the routing rules and maintenance mode from the storage file.
+func (s *Storage) Load() (map[string]*Rule, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.rules[host] = target
-}
 
-// Remove removes a rule from the store
-func (s *RuleStore) Remove(host string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.rules, host)
-}
-
-// Get returns the target for a given host
-func (s *RuleStore) Get(host string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	target, ok := s.rules[host]
-	return target, ok
-}
-
-// All returns all rules in the store
-func (s *RuleStore) All() map[string]string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	// Return a copy to prevent race conditions
-	newRules := make(map[string]string)
-	for k, v := range s.rules {
-		newRules[k] = v
+	data, err := os.ReadFile(s.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]*Rule), false, nil
+		}
+		return nil, false, err
 	}
-	return newRules
+
+	if len(data) == 0 {
+		return make(map[string]*Rule), false, nil
+	}
+
+	var storedData storageData
+	if err := json.Unmarshal(data, &storedData); err != nil {
+		return nil, false, err
+	}
+	return storedData.Rules, storedData.MaintenanceMode, nil
 }
 
-// SetMaintenanceMode sets the maintenance mode status
-func (s *RuleStore) SetMaintenanceMode(enabled bool) {
+// Save writes the routing rules and maintenance mode to the storage file.
+func (s *Storage) Save(rules map[string]*Rule, maintenanceMode bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.maintenanceMode = enabled
-}
 
-// IsMaintenanceMode returns the current maintenance mode status
-func (s *RuleStore) IsMaintenanceMode() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.maintenanceMode
+	storedData := storageData{
+		Rules:           rules,
+		MaintenanceMode: maintenanceMode,
+	}
+
+	data, err := json.MarshalIndent(storedData, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(s.filePath, data, 0644)
 }

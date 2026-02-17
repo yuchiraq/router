@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stats - Router</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="/static/chart.js"></script>
     <script src="/static/color-hash.js"></script>
 </head>
@@ -48,211 +44,339 @@
             </div>
         </div>
 
+        <div class="card">
+            <div class="card-header">SSH Connections</div>
+            <div class="card-body">
+                <div class="ssh-current" id="ssh-current">Current established: 0</div>
+                <div class="ssh-table ssh-table-head">
+                    <div>IP</div><div>Country</div><div>Date</div><div>Time</div><div>Device</div>
+                </div>
+                <div class="ssh-table" id="ssh-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Requests by Country</div>
+            <div class="card-body">
+                <div class="country-table" id="country-table"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Disk Usage</div>
+            <div class="card-body">
+                <div class="disk-table" id="disk-table"></div>
+            </div>
+        </div>
+
         <script>
-            // --- Chart Configuration ---
-            const colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
+            (function () {
+                var memoryCanvas = document.getElementById('memory-chart');
+                var cpuCanvas = document.getElementById('cpu-chart');
+                var requestsCanvas = document.getElementById('requests-chart');
+                var sshCanvas = document.getElementById('ssh-chart');
 
-            const chartOptions = {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
-                    },
-                    y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' },
-                        beginAtZero: true
-                    }
-                },
-                plugins: {
-                    legend: {
-                        labels: { color: '#f0f0f5' }
-                    },
-                    tooltip: {
-                        callbacks: {}
-                    }
-                },
-                interaction: {
-                    intersect: false,
-                    mode: 'index',
-                },
-                tension: 0.4,
-            };
+                if (!memoryCanvas || !cpuCanvas || !requestsCanvas || !sshCanvas) {
+                    console.warn('Charts not initialized: missing canvas elements.');
+                    return;
+                }
 
-            // --- Memory Chart (Working Example) ---
-            const memoryChartOptions = {
-                ...chartOptions,
-                plugins: {
-                    ...chartOptions.plugins,
-                    tooltip: {
-                        ...chartOptions.plugins.tooltip,
-                        callbacks: {
-                            ...chartOptions.plugins.tooltip.callbacks,
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) { label += ': '; }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toFixed(2) + ' %';
+                var memoryContext = memoryCanvas.getContext('2d');
+                var cpuContext = cpuCanvas.getContext('2d');
+                var requestsContext = requestsCanvas.getContext('2d');
+                var sshContext = sshCanvas.getContext('2d');
+
+                if (!memoryContext || !cpuContext || !requestsContext || !sshContext) {
+                    console.warn('Charts not initialized: missing canvas contexts.');
+                    return;
+                }
+
+                // --- Chart Configuration ---
+                var colorHash = new ColorHash({lightness: 0.6, saturation: 0.8});
+                var styles = getComputedStyle(document.documentElement);
+                var chartGrid = styles.getPropertyValue('--chart-grid').trim() || 'rgba(255, 255, 255, 0.1)';
+                var chartTick = styles.getPropertyValue('--chart-tick').trim() || '#a0a0a5';
+
+                var chartOptions = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: chartGrid },
+                            ticks: { color: chartTick }
+                        },
+                        y: {
+                            grid: { color: chartGrid },
+                            ticks: { color: chartTick },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: chartTick }
+                        },
+                        tooltip: {
+                            callbacks: {}
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    tension: 0.4
+                };
+
+                // --- Memory Chart ---
+                var memoryChartOptions = {
+                    responsive: chartOptions.responsive,
+                    maintainAspectRatio: chartOptions.maintainAspectRatio,
+                    scales: {
+                        x: {
+                            grid: { color: chartGrid },
+                            ticks: { color: chartTick }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: chartGrid },
+                            ticks: { color: '#32D74B' },
+                            beginAtZero: true,
+                            suggestedMax: 100,
+                            title: { display: true, text: '%', color: '#32D74B' }
+                        }
+                    },
+                    plugins: {
+                        legend: chartOptions.plugins.legend,
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    var label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2) + ' %';
+                                    }
+                                    return label;
                                 }
-                                return label;
                             }
                         }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
                     },
-                    y: { // Use a common 'y' axis for simplicity if scales are similar
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#32D74B' },
-                        beginAtZero: true,
-                        suggestedMax: 100,
-                        title: { display: true, text: '%', color: '#32D74B' }
-                    }
-                }
-            };
+                    interaction: chartOptions.interaction,
+                    tension: chartOptions.tension
+                };
 
-            const memoryChart = new Chart(document.getElementById('memory-chart').getContext('2d'), {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Used (%)',
-                        data: [],
-                        borderColor: '#32D74B',
-                        backgroundColor: 'rgba(50, 215, 75, 0.2)',
-                        fill: true,
-                        yAxisID: 'y',
-                    }]
-                },
-                options: memoryChartOptions,
-            });
+                var memoryChart = new Chart(memoryContext, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Used (%)',
+                            data: [],
+                            borderColor: '#32D74B',
+                            backgroundColor: 'rgba(50, 215, 75, 0.2)',
+                            fill: true,
+                            yAxisID: 'y'
+                        }]
+                    },
+                    options: memoryChartOptions
+                });
 
-            // --- CPU Chart (Fixed) ---
-            const cpuChartOptions = {
-                ...chartOptions,
-                plugins: {
-                    ...chartOptions.plugins,
-                    tooltip: {
-                        ...chartOptions.plugins.tooltip,
-                        callbacks: {
-                            ...chartOptions.plugins.tooltip.callbacks,
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) { label += ': '; }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toFixed(2) + ' %';
+                // --- CPU Chart ---
+                var cpuChartOptions = {
+                    responsive: chartOptions.responsive,
+                    maintainAspectRatio: chartOptions.maintainAspectRatio,
+                    scales: {
+                        x: {
+                            grid: { color: chartGrid },
+                            ticks: { color: chartTick }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: chartGrid },
+                            ticks: { color: '#FF9F0A' },
+                            beginAtZero: true,
+                            suggestedMax: 100,
+                            title: { display: true, text: '%', color: '#FF9F0A' }
+                        }
+                    },
+                    plugins: {
+                        legend: chartOptions.plugins.legend,
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    var label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2) + ' %';
+                                    }
+                                    return label;
                                 }
-                                return label;
                             }
                         }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#a0a0a5' }
                     },
-                    y: { // Use a common 'y' axis for simplicity
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        ticks: { color: '#FF9F0A' },
-                        beginAtZero: true,
-                        suggestedMax: 100,
-                        title: { display: true, text: '%', color: '#FF9F0A' }
-                    }
-                }
-            };
+                    interaction: chartOptions.interaction,
+                    tension: chartOptions.tension
+                };
 
-            const cpuChart = new Chart(document.getElementById('cpu-chart').getContext('2d'), {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Used (%)',
-                        data: [],
-                        borderColor: '#FF9F0A',
-                        backgroundColor: 'rgba(255, 159, 10, 0.2)',
-                        fill: true,
-                        yAxisID: 'y', // Match the common 'y' axis
-                    }]
-                },
-                options: cpuChartOptions,
-            });
+                var cpuChart = new Chart(cpuContext, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Used (%)',
+                            data: [],
+                            borderColor: '#FF9F0A',
+                            backgroundColor: 'rgba(255, 159, 10, 0.2)',
+                            fill: true,
+                            yAxisID: 'y'
+                        }]
+                    },
+                    options: cpuChartOptions
+                });
 
-            // --- Requests Chart ---
-            const requestsChart = new Chart(document.getElementById('requests-chart').getContext('2d'), {
-                type: 'line',
-                data: { labels: [], datasets: [] },
-                options: chartOptions,
-            });
+                // --- Requests Chart ---
+                var requestsChart = new Chart(requestsContext, {
+                    type: 'line',
+                    data: { labels: [], datasets: [] },
+                    options: chartOptions
+                });
 
-            // --- Data Fetching ---
-            function fetchData() {
-                fetch('/stats/data')
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        // Update Memory Chart
-                        if (data.memory && data.memory.labels.length > 0) {
-                            memoryChart.data.labels = data.memory.labels;
-                            memoryChart.data.datasets[0].data = data.memory.percents;
-                            memoryChart.update();
-                        }
 
-                        // Update CPU Chart
-                        if (data.cpu && data.cpu.labels.length > 0) {
-                            cpuChart.data.labels = data.cpu.labels;
-                            cpuChart.data.datasets[0].data = data.cpu.percents;
-                            cpuChart.update();
-                        }
+                // --- Data Fetching ---
+                function fetchData() {
+                    fetch('/stats/data', { credentials: 'same-origin' })
+                        .then(function(response) {
+                            if (!response.ok) {
+                                throw new Error('HTTP error! status: ' + response.status);
+                            }
+                            return response.json();
+                        })
+                        .then(function(data) {
+                            if (data.memory && data.memory.labels.length > 0) {
+                                memoryChart.data.labels = data.memory.labels;
+                                memoryChart.data.datasets[0].data = data.memory.percents;
+                                memoryChart.update();
+                            }
 
-                        // Update Requests Chart
-                        if (data.requests && data.requests.datasets) {
-                            requestsChart.data.labels = data.requests.labels;
-                            data.requests.datasets.forEach(newDataset => {
-                                const existingDataset = requestsChart.data.datasets.find(d => d.label === newDataset.label);
-                                if (existingDataset) {
-                                    existingDataset.data = newDataset.data;
-                                } else {
-                                    const color = colorHash.hex(newDataset.label);
-                                    requestsChart.data.datasets.push({
-                                        ...newDataset,
-                                        borderColor: color,
-                                        backgroundColor: color + '33',
-                                        fill: true,
-                                    });
+                            if (data.cpu && data.cpu.labels.length > 0) {
+                                cpuChart.data.labels = data.cpu.labels;
+                                cpuChart.data.datasets[0].data = data.cpu.percents;
+                                cpuChart.update();
+                            }
+
+                            if (data.requests && data.requests.datasets) {
+                                requestsChart.data.labels = data.requests.labels;
+
+                                for (var i = 0; i < data.requests.datasets.length; i++) {
+                                    var newDataset = data.requests.datasets[i];
+                                    var existingDataset = null;
+
+                                    for (var j = 0; j < requestsChart.data.datasets.length; j++) {
+                                        if (requestsChart.data.datasets[j].label === newDataset.label) {
+                                            existingDataset = requestsChart.data.datasets[j];
+                                            break;
+                                        }
+                                    }
+
+                                    if (existingDataset) {
+                                        existingDataset.data = newDataset.data;
+                                    } else {
+                                        var color = colorHash.hex(newDataset.label);
+                                        requestsChart.data.datasets.push({
+                                            label: newDataset.label,
+                                            data: newDataset.data,
+                                            borderColor: color,
+                                            backgroundColor: color + '33',
+                                            fill: true
+                                        });
+                                    }
                                 }
-                            });
-                            requestsChart.data.datasets = requestsChart.data.datasets.filter(d => 
-                                data.requests.datasets.some(nd => nd.label === d.label)
-                            );
 
-                            requestsChart.update();
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching stats data:', error);
-                    });
-            }
+                                var filteredDatasets = [];
+                                for (var k = 0; k < requestsChart.data.datasets.length; k++) {
+                                    var current = requestsChart.data.datasets[k];
+                                    var found = false;
+                                    for (var n = 0; n < data.requests.datasets.length; n++) {
+                                        if (data.requests.datasets[n].label === current.label) {
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                    if (found) {
+                                        filteredDatasets.push(current);
+                                    }
+                                }
+                                requestsChart.data.datasets = filteredDatasets;
 
-            // --- Initial Load & Interval ---
-            setInterval(fetchData, 3000);
-            fetchData();
+                                requestsChart.update();
+                            }
 
+
+                            if (data.ssh) {
+                                var sshCurrent = document.getElementById('ssh-current');
+                                sshCurrent.textContent = 'Current established: ' + (data.ssh.current || 0);
+
+                                var sshTable = document.getElementById('ssh-table');
+                                var sshSessions = data.ssh.sessions || [];
+                                var sshRows = '';
+                                for (var si = 0; si < sshSessions.length; si++) {
+                                    var session = sshSessions[si];
+                                    sshRows += '<div class="ssh-row">' +
+                                        '<div class="ssh-ip">' + session.ip + ':' + session.port + '</div>' +
+                                        '<div class="ssh-country">' + session.countryName + ' (' + session.countryCode + ')</div>' +
+                                        '<div class="ssh-date">' + session.date + '</div>' +
+                                        '<div class="ssh-time">' + session.time + '</div>' +
+                                        '<div class="ssh-device">' + session.device + '</div>' +
+                                    '</div>';
+                                }
+                                sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH sessions.</div>';
+                            }
+
+                            if (data.countries) {
+                                var countryTable = document.getElementById('country-table');
+                                var countryRows = '';
+                                for (var ci = 0; ci < data.countries.length; ci++) {
+                                    var country = data.countries[ci];
+                                    countryRows += '<div class="country-row">' +
+                                        '<div class="country-name">' + country.name + ' <span>(' + country.code + ')</span></div>' +
+                                        '<div class="country-count">' + country.count + '</div>' +
+                                    '</div>';
+                                }
+                                countryTable.innerHTML = countryRows || '<div class="disk-empty">No country data yet.</div>';
+                            }
+
+                            if (data.disks) {
+                                var table = document.getElementById('disk-table');
+                                var rows = '';
+                                for (var di = 0; di < data.disks.length; di++) {
+                                    var disk = data.disks[di];
+                                    rows += '<div class="disk-row">' +
+                                        '<div class="disk-main">' +
+                                            '<div class="disk-title">' + disk.mountpoint + '</div>' +
+                                            '<div class="disk-subtitle">' + disk.device + ' • ' + disk.fstype + '</div>' +
+                                        '</div>' +
+                                        '<div class="disk-metrics">' +
+                                            '<div><strong>' + disk.usedPercent.toFixed(1) + '%</strong> used</div>' +
+                                            '<div>' + disk.freeGB.toFixed(1) + ' GB free / ' + disk.totalGB.toFixed(1) + ' GB total</div>' +
+                                        '</div>' +
+                                        '<div class="disk-bar">' +
+                                            '<div class="disk-bar-fill" style="width: ' + disk.usedPercent.toFixed(1) + '%"></div>' +
+                                        '</div>' +
+                                    '</div>';
+                                }
+                                table.innerHTML = rows || '<div class="disk-empty">No disks found.</div>';
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('Error fetching stats data:', error);
+                        });
+                }
+
+                setInterval(fetchData, 3000);
+                fetchData();
+            })();
         </script>
     </main>
 </body>

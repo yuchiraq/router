@@ -1,58 +1,140 @@
-# Go Reverse Proxy with Admin Panel
+# Go Reverse Proxy с административной панелью
 
-This project is a web server written in Go that functions as a reverse proxy. It includes an admin panel for managing routing rules, viewing statistics, and streaming logs in real time.
+Этот проект — Go‑сервис, который сочетает обратный прокси и веб‑панель управления маршрутизацией, статистикой и логами. Он принимает входящие HTTP/HTTPS‑запросы, сопоставляет их с правилами в `rules.json` и проксирует трафик на внутренние сервисы. Кроме того, он содержит панель администратора для управления правилами, режимом обслуживания и просмотра метрик в реальном времени.
 
-## Features
+## Что внутри и как это работает
 
-- **Reverse Proxy:** Routes incoming HTTP and HTTPS requests to various backend services based on customizable rules.
-- **Admin Panel:** A web interface for:
-  - Adding and removing routing rules.
-  - Viewing real-time server statistics (e.g., memory usage, request count).
-  - Streaming server logs via WebSockets.
-- **Automatic HTTPS:** Uses `autocert` to automatically obtain and renew TLS certificates from Let's Encrypt.
-- **Security:** The admin panel is protected by basic authentication.
+### Общая архитектура
 
-## Getting Started
+1. **Хранилище правил**
+   - `storage.Storage` читает и пишет JSON‑файл `rules.json`, где хранятся правила маршрутизации и флаг режима обслуживания.
+   - `storage.RuleStore` держит правила в памяти, предоставляет методы для добавления/удаления/поиска правил, содержит флаг `MaintenanceMode` и периодически проверяет доступность целевых сервисов.
 
-### Prerequisites
+2. **Обратный прокси**
+   - `proxy.Proxy` реализует `http.Handler` и для каждого запроса ищет правило по `Host`.
+   - При включенном режиме обслуживания возвращает страницу `maintenance.html` со статусом `503`.
+   - При отсутствии правила возвращает `404`.
+   - При наличии правила — проксирует на целевой сервис через `httputil.NewSingleHostReverseProxy` и обновляет статистику запросов.
 
-- Go 1.24.0 or newer.
-- A registered domain name.
+3. **Админ‑панель**
+   - `panel.Handler` обслуживает HTML‑шаблоны и REST‑эндпоинты добавления/удаления правил.
+   - Использует базовую аутентификацию (если заданы логин/пароль в окружении).
+   - Отдает статистику в JSON и стримит логи по WebSocket.
 
-### Installation
+4. **Статистика и логи**
+   - `stats.Stats` собирает метрики: количество запросов по доменам, использование памяти и CPU.
+   - `logstream.Broadcaster` вещает лог‑сообщения всем подключенным клиентам, а также хранит последние 100 записей.
 
-1. **Clone the repository:**
+### Точка входа (основной режим с TLS/Let’s Encrypt)
+
+- **Порты:**
+  - HTTP: `:80` (ACME challenge + редирект/прокси через `autocert`)
+  - HTTPS: `:443`
+  - Админ‑панель: `:8162`
+- **TLS:** автоматические сертификаты через `golang.org/x/crypto/acme/autocert`.
+- **Аутентификация панели:** `ADMIN_USER` / `ADMIN_PASS`.
+- **Логи:** пишутся в `stderr` и в WebSocket‑стрим.
+- **Период метрик памяти:** каждые 5 секунд.
+
+## Правила маршрутизации (`rules.json`)
+
+Правила хранятся в JSON‑файле `rules.json` в формате:
+
+```json
+{
+  "rules": {
+    "example.com": {
+      "target": "localhost:3000"
+    },
+    "api.example.com": {
+      "target": "10.0.0.15:8080"
+    }
+  },
+  "maintenanceMode": false
+}
+```
+
+- Ключом выступает домен (`Host`), который приходит в запросе.
+- `target` — адрес внутреннего сервиса (без схемы, например `localhost:3000`).
+- Флаг `maintenanceMode` управляет страницей обслуживания.
+
+`RuleStore` хранит еще и служебные поля (последний доступ, флаг доступности сервиса), но они не сериализуются в файл.
+
+## Административная панель
+
+Панель предоставляет:
+
+- **Главная (`/`)** — список правил, форма добавления, переключатель режима обслуживания.
+- **Статистика (`/stats`)** — графики памяти, CPU и запросов (Chart.js).
+- **Логи (`/ws/logs` или `/ws`)** — поток логов в реальном времени через WebSocket.
+
+### Эндпоинты панели
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET | `/` | список правил, переключатель режима обслуживания |
+| POST | `/` | включение/выключение режима обслуживания |
+| POST | `/add` | добавить правило (`host`, `target`) |
+| POST | `/remove` | удалить правило (`host`) |
+| GET | `/stats` | HTML‑страница с графиками |
+| GET | `/stats/data` | JSON‑данные для графиков |
+| GET | `/ws/logs` | WebSocket для логов |
+
+## Метрики и мониторинг
+
+- **Память** — собирается через `gopsutil/mem` и отображается на графике как процент и абсолютное значение.
+- **CPU** — собирается через `gopsutil/cpu`.
+- **Запросы** — сгруппированы по доменам и отображаются как график по последним 24 часам.
+
+## Проверка здоровья сервисов
+
+`RuleStore` каждые 60 секунд пытается подключиться к целевому сервису (`net.DialTimeout`). Если адрес не содержит порт, отметка сервиса как «down» сохраняется в памяти (это используется для статуса в UI/логике, но не записывается в JSON).
+
+## Зависимости
+
+- `golang.org/x/crypto/acme/autocert` — автоматическое получение TLS‑сертификатов.
+- `github.com/gorilla/websocket` — WebSocket‑стрим логов.
+- `github.com/shirou/gopsutil` — сбор системных метрик.
+
+## Структура проекта
+
+```
+.
+├── main.go                      # Запуск с TLS/Let’s Encrypt
+├── internal/
+│   ├── config/                  # Конфигурация через env‑переменные
+│   ├── logstream/               # Бродкастер логов для WebSocket
+│   ├── panel/                   # Обработчики и шаблоны панели
+│   ├── proxy/                   # Обратный прокси
+│   ├── stats/                   # Сбор и выдача метрик
+│   └── storage/                 # Хранилище и RuleStore
+├── rules.json                   # Локальное хранилище правил (создается автоматически)
+└── README.md
+```
+
+## Быстрый старт
+
+1. Убедитесь, что у вас есть домен, указывающий на этот сервер.
+2. Установите переменные окружения (опционально для базовой авторизации панели):
+
    ```bash
-   git clone https://github.com/your-username/your-repo-name.git
-   cd your-repo-name
+   export ADMIN_USER=admin
+   export ADMIN_PASS=secret
    ```
 
-2. **Set environment variables:**
-   Create a `.env` file in the project root and add the following:
-   ```
-   ADMIN_USER=your_admin_username
-   ADMIN_PASS=your_admin_password
-   ```
+3. Запустите:
 
-3. **Run the server:**
    ```bash
    go run main.go
    ```
 
-## Usage
+## Поведение прокси
 
-- **Proxy:** The proxy server runs on ports 80 (HTTP) and 443 (HTTPS).
-- **Admin Panel:** The admin panel is available at `http://localhost:8162`.
+- **TLS‑режим**: HTTPS на `:443`, HTTP на `:80` используется для ACME‑челленджа.
+- **Поиск правила**: домен сопоставляется по `Host` заголовку (например, `example.com`).
+- **Проксирование**: заголовки `X-Forwarded-Host` и `Host` обновляются перед передачей запроса целевому сервису.
+- **Режим обслуживания**: возвращается 503 + страница обслуживания.
 
-## Project Structure
+---
 
-- `main.go`: The main entry point of the application.
-- `cmd/main.go`: An alternative main entry point.
-- `internal/`: Contains the application's internal packages.
-  - `logstream/`: Log streaming via WebSocket.
-  - `panel/`: Admin panel handlers and templates.
-  - `proxy/`: Reverse proxy logic.
-  - `stats/`: Statistics collection.
-  - `storage/`: Routing rule storage.
-- `go.mod`, `go.sum`: Go module files.
-- `GEMINI.md`: AI rules for the project.
+Если хотите расширить поведение (например, добавить авторизацию, rate‑limiting или кэширование), основные точки расширения находятся в `internal/proxy`, `internal/panel` и `internal/storage`.
