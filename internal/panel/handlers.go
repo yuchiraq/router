@@ -1,13 +1,14 @@
+
 package panel
 
 import (
 	"html/template"
+	"log"
 	"net/http"
 <<<<<<< HEAD
 	"router/internal/clog"
 =======
 	"path/filepath"
->>>>>>> main
 
 	"router/internal/logstream"
 	"router/internal/stats"
@@ -79,7 +80,6 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 
 	if err := tmpl.ExecuteTemplate(w, "layout.html", templateData); err != nil {
 		log.Printf("Error executing template %s: %v", name, err)
->>>>>>> main
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 	}
 }
