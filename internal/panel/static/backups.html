@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backups - Router</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">Router</a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/stats">Stats</a>
+                <a href="/backups" class="active">Backups</a>
+                <a href="/notifications">Notifications</a>
+            </div>
+        </div>
+    </nav>
+    <main class="container">
+        <div class="header"><h1>Backups</h1></div>
+
+        <div class="card">
+            <div class="card-header">Backup Settings</div>
+            <div class="card-body">
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <label><input type="checkbox" id="enabled"> Enabled schedule</label>
+                </div>
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <input class="form-control" id="destinationDir" placeholder="Destination folder for .zip archives">
+                    <input class="form-control" id="intervalMinutes" type="number" min="1" placeholder="Interval (minutes)">
+                    <input class="form-control" id="keepCopies" type="number" min="1" placeholder="Copies to keep">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <textarea class="form-control" id="sources" rows="6" placeholder="One source per line (file or folder path)"></textarea>
+                </div>
+                <div class="form-inline">
+                    <button class="btn" id="save-btn" type="button">Save Settings</button>
+                    <button class="btn" id="run-btn" type="button">Run Backup Now</button>
+                </div>
+                <p id="status-msg" style="margin-top:12px;color:var(--text-secondary);"></p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Backup Archives</div>
+            <div class="card-body">
+                <div class="disk-table" id="backups-table"></div>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                function setStatus(text, isError) {
+                    var el = document.getElementById('status-msg');
+                    if (!el) return;
+                    el.textContent = text || '';
+                    el.style.color = isError ? 'var(--accent-red)' : 'var(--text-secondary)';
+                }
+
+                function fetchData() {
+                    return fetch('/backups/data', { credentials: 'same-origin' })
+                        .then(function (response) {
+                            if (!response.ok) throw new Error('failed to load backup data');
+                            return response.json();
+                        })
+                        .then(function (data) {
+                            var cfg = data.config || {};
+                            document.getElementById('enabled').checked = !!cfg.enabled;
+                            document.getElementById('destinationDir').value = cfg.destinationDir || '';
+                            document.getElementById('intervalMinutes').value = cfg.intervalMinutes || 60;
+                            document.getElementById('keepCopies').value = cfg.keepCopies || 10;
+                            document.getElementById('sources').value = (cfg.sources || []).join('\n');
+
+                            if (data.lastError) {
+                                setStatus('Last error: ' + data.lastError, true);
+                            } else {
+                                setStatus('');
+                            }
+
+                            var table = document.getElementById('backups-table');
+                            var rows = '';
+                            var entries = data.entries || [];
+                            for (var i = 0; i < entries.length; i++) {
+                                var e = entries[i];
+                                rows += '<div class="disk-row">' +
+                                    '<div class="disk-main"><div class="disk-title">' + e.path + '</div></div>' +
+                                    '<div class="disk-metrics">' +
+                                        '<div>created: ' + new Date(e.createdAt).toLocaleString() + '</div>' +
+                                        '<div>size: ' + (e.sizeBytes / 1024 / 1024).toFixed(2) + ' MB</div>' +
+                                    '</div>' +
+                                '</div>';
+                            }
+                            table.innerHTML = rows || '<div class="disk-empty">No backup archives yet.</div>';
+                        })
+                        .catch(function (err) {
+                            setStatus(err.message || String(err), true);
+                        });
+                }
+
+                function saveConfig() {
+                    var body = new URLSearchParams();
+                    body.set('enabled', document.getElementById('enabled').checked ? 'on' : '');
+                    body.set('destinationDir', document.getElementById('destinationDir').value.trim());
+                    body.set('intervalMinutes', document.getElementById('intervalMinutes').value || '60');
+                    body.set('keepCopies', document.getElementById('keepCopies').value || '10');
+                    body.set('sources', document.getElementById('sources').value || '');
+
+                    return fetch('/backups/config', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    }).then(function (response) {
+                        if (!response.ok) throw new Error('failed to save settings');
+                        setStatus('Settings saved.', false);
+                    });
+                }
+
+                function runNow() {
+                    return fetch('/backups/run', {
+                        method: 'POST',
+                        credentials: 'same-origin'
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            return response.text().then(function (t) { throw new Error(t || 'backup failed'); });
+                        }
+                        setStatus('Backup completed.', false);
+                    });
+                }
+
+                document.getElementById('save-btn').addEventListener('click', function () {
+                    saveConfig().then(fetchData).catch(function (e) { setStatus(e.message, true); });
+                });
+                document.getElementById('run-btn').addEventListener('click', function () {
+                    runNow().then(fetchData).catch(function (e) { setStatus(e.message, true); });
+                });
+
+                fetchData();
+                setInterval(fetchData, 5000);
+            })();
+        </script>
+    </main>
+</body>
+</html>
