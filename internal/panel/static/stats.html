@@ -263,6 +263,19 @@
                     });
                 }
 
+                function unbanIP(ip) {
+                    return fetch('/stats/unban', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'ip=' + encodeURIComponent(ip)
+                    }).then(function(response) {
+                        if (!response.ok) {
+                            throw new Error('failed to unban ip ' + ip);
+                        }
+                    });
+                }
+
                 function fetchData() {
                     fetch('/stats/data', { credentials: 'same-origin' })
                         .then(function(response) {
@@ -393,7 +406,7 @@
                                 for (var xi = 0; xi < data.suspicious.length; xi++) {
                                     var item = data.suspicious[xi];
                                     var action = item.banned
-                                        ? '<span class="country-count">banned</span>'
+                                        ? '<button class="btn" data-unban-ip="' + item.ip + '">Unban</button>'
                                         : '<button class="btn btn-danger" data-ban-ip="' + item.ip + '">Ban</button>';
                                     suspiciousRows += '<div class="disk-row">' +
                                         '<div class="disk-main">' +
@@ -409,11 +422,21 @@
                                 }
                                 suspiciousTable.innerHTML = suspiciousRows || '<div class="disk-empty">No suspicious IPs.</div>';
 
-                                var buttons = suspiciousTable.querySelectorAll('[data-ban-ip]');
-                                for (var bi = 0; bi < buttons.length; bi++) {
-                                    buttons[bi].addEventListener('click', function(ev) {
+                                var banButtons = suspiciousTable.querySelectorAll('[data-ban-ip]');
+                                for (var bi = 0; bi < banButtons.length; bi++) {
+                                    banButtons[bi].addEventListener('click', function(ev) {
                                         var ip = ev.currentTarget.getAttribute('data-ban-ip');
                                         banIP(ip)
+                                            .then(fetchData)
+                                            .catch(function(error) { console.error(error); });
+                                    });
+                                }
+
+                                var unbanButtons = suspiciousTable.querySelectorAll('[data-unban-ip]');
+                                for (var ui = 0; ui < unbanButtons.length; ui++) {
+                                    unbanButtons[ui].addEventListener('click', function(ev) {
+                                        var ip = ev.currentTarget.getAttribute('data-unban-ip');
+                                        unbanIP(ip)
                                             .then(fetchData)
                                             .catch(function(error) { console.error(error); });
                                     });

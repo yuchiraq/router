@@ -64,6 +64,7 @@ func main() {
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
 		panelMux.HandleFunc("/stats/ban", panelHandler.BanSuspiciousIP)
+		panelMux.HandleFunc("/stats/unban", panelHandler.UnbanSuspiciousIP)
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
