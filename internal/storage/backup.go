@@ -13,38 +13,42 @@ import (
 	"time"
 )
 
-type BackupConfig struct {
-	Sources         []string `json:"sources"`
-	DestinationDir  string   `json:"destinationDir"`
-	IntervalMinutes int      `json:"intervalMinutes"`
-	KeepCopies      int      `json:"keepCopies"`
-	Enabled         bool     `json:"enabled"`
+type BackupJob struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Sources         []string  `json:"sources"`
+	DestinationDir  string    `json:"destinationDir"`
+	IntervalMinutes int       `json:"intervalMinutes"`
+	KeepCopies      int       `json:"keepCopies"`
+	Enabled         bool      `json:"enabled"`
+	LastRunAt       time.Time `json:"lastRunAt,omitempty"`
 }
 
 type BackupEntry struct {
-	Path      string    `json:"path"`
-	CreatedAt time.Time `json:"createdAt"`
-	SizeBytes int64     `json:"sizeBytes"`
+	JobID      string    `json:"jobId"`
+	JobName    string    `json:"jobName"`
+	Path       string    `json:"path"`
+	CreatedAt  time.Time `json:"createdAt"`
+	SizeBytes  int64     `json:"sizeBytes"`
 }
 
 type backupState struct {
-	Config    BackupConfig  `json:"config"`
+	Jobs      []BackupJob  `json:"jobs"`
 	Entries   []BackupEntry `json:"entries"`
-	LastError string        `json:"lastError,omitempty"`
+	LastError string       `json:"lastError,omitempty"`
 }
 
 type BackupStore struct {
 	mu        sync.RWMutex
 	path      string
-	config    BackupConfig
+	jobs      []BackupJob
 	entries   []BackupEntry
 	lastError string
 	OnResult  func(err error, archivePath string)
 }
 
 func NewBackupStore(path string) *BackupStore {
-	s := &BackupStore{path: path}
-	s.config = BackupConfig{IntervalMinutes: 60, KeepCopies: 10, Enabled: false, Sources: []string{}}
+	s := &BackupStore{path: path, jobs: []BackupJob{}}
 	s.load()
 	return s
 }
@@ -61,46 +65,95 @@ func (s *BackupStore) load() {
 	if err := json.Unmarshal(data, &st); err != nil {
 		return
 	}
-	if st.Config.IntervalMinutes <= 0 {
-		st.Config.IntervalMinutes = 60
+	for i := range st.Jobs {
+		st.Jobs[i] = normalizeJob(st.Jobs[i])
 	}
-	if st.Config.KeepCopies <= 0 {
-		st.Config.KeepCopies = 10
-	}
-	s.config = st.Config
+	s.jobs = st.Jobs
 	s.entries = st.Entries
 	s.lastError = st.LastError
 }
 
+func normalizeJob(job BackupJob) BackupJob {
+	if job.IntervalMinutes <= 0 {
+		job.IntervalMinutes = 60
+	}
+	if job.KeepCopies <= 0 {
+		job.KeepCopies = 10
+	}
+	job.Sources = normalizeSources(job.Sources)
+	job.Name = strings.TrimSpace(job.Name)
+	if job.Name == "" {
+		job.Name = "Backup job"
+	}
+	return job
+}
+
 func (s *BackupStore) saveLocked() {
-	data, err := json.MarshalIndent(backupState{Config: s.config, Entries: s.entries, LastError: s.lastError}, "", "  ")
+	data, err := json.MarshalIndent(backupState{Jobs: s.jobs, Entries: s.entries, LastError: s.lastError}, "", "  ")
 	if err != nil {
 		return
 	}
 	_ = os.WriteFile(s.path, data, 0644)
 }
 
-func (s *BackupStore) Get() (BackupConfig, []BackupEntry, string) {
+func (s *BackupStore) Get() ([]BackupJob, []BackupEntry, string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	cfg := s.config
+	jobs := make([]BackupJob, len(s.jobs))
+	copy(jobs, s.jobs)
 	entries := make([]BackupEntry, len(s.entries))
 	copy(entries, s.entries)
-	return cfg, entries, s.lastError
+	return jobs, entries, s.lastError
 }
 
-func (s *BackupStore) UpdateConfig(cfg BackupConfig) {
+func (s *BackupStore) UpsertJob(job BackupJob) BackupJob {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if cfg.IntervalMinutes <= 0 {
-		cfg.IntervalMinutes = 60
+	job = normalizeJob(job)
+	if strings.TrimSpace(job.ID) == "" {
+		job.ID = fmt.Sprintf("job-%d", time.Now().UnixNano())
+		s.jobs = append(s.jobs, job)
+		s.saveLocked()
+		return job
 	}
-	if cfg.KeepCopies <= 0 {
-		cfg.KeepCopies = 10
+	for i := range s.jobs {
+		if s.jobs[i].ID == job.ID {
+			job.LastRunAt = s.jobs[i].LastRunAt
+			s.jobs[i] = job
+			s.saveLocked()
+			return job
+		}
 	}
-	cfg.Sources = normalizeSources(cfg.Sources)
-	s.config = cfg
+	s.jobs = append(s.jobs, job)
 	s.saveLocked()
+	return job
+}
+
+func (s *BackupStore) DeleteJob(jobID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx := -1
+	for i := range s.jobs {
+		if s.jobs[i].ID == jobID {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return false
+	}
+	s.jobs = append(s.jobs[:idx], s.jobs[idx+1:]...)
+	filtered := s.entries[:0]
+	for _, e := range s.entries {
+		if e.JobID != jobID {
+			filtered = append(filtered, e)
+			continue
+		}
+		_ = os.Remove(e.Path)
+	}
+	s.entries = filtered
+	s.saveLocked()
+	return true
 }
 
 func normalizeSources(sources []string) []string {
@@ -123,19 +176,44 @@ func normalizeSources(sources []string) []string {
 func (s *BackupStore) Start() {
 	for {
 		time.Sleep(1 * time.Minute)
-		cfg, _, _ := s.Get()
-		if !cfg.Enabled || cfg.DestinationDir == "" || len(cfg.Sources) == 0 {
-			continue
-		}
-		if time.Now().Unix()%int64(cfg.IntervalMinutes*60) < 60 {
-			_ = s.RunNow()
-		}
+		_ = s.runDueJobs()
 	}
 }
 
-func (s *BackupStore) RunNow() error {
+func (s *BackupStore) runDueJobs() error {
+	now := time.Now()
+	jobs, _, _ := s.Get()
+	for _, job := range jobs {
+		if !job.Enabled {
+			continue
+		}
+		if job.DestinationDir == "" || len(job.Sources) == 0 {
+			continue
+		}
+		if !job.LastRunAt.IsZero() && now.Sub(job.LastRunAt) < time.Duration(job.IntervalMinutes)*time.Minute {
+			continue
+		}
+		if err := s.RunJobNow(job.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *BackupStore) RunJobNow(jobID string) error {
 	s.mu.Lock()
-	cfg := s.config
+	var job *BackupJob
+	for i := range s.jobs {
+		if s.jobs[i].ID == jobID {
+			job = &s.jobs[i]
+			break
+		}
+	}
+	if job == nil {
+		s.mu.Unlock()
+		return s.setError(fmt.Errorf("backup job not found"))
+	}
+	cfg := *job
 	s.mu.Unlock()
 
 	if cfg.DestinationDir == "" {
@@ -144,12 +222,11 @@ func (s *BackupStore) RunNow() error {
 	if len(cfg.Sources) == 0 {
 		return s.setError(fmt.Errorf("at least one source is required"))
 	}
-
 	if err := os.MkdirAll(cfg.DestinationDir, 0755); err != nil {
 		return s.setError(err)
 	}
 
-	archivePath := filepath.Join(cfg.DestinationDir, "backup-"+time.Now().Format("20060102-150405.000000000")+".zip")
+	archivePath := filepath.Join(cfg.DestinationDir, fmt.Sprintf("%s-%s.zip", sanitizeName(cfg.Name), time.Now().Format("20060102-150405.000000000")))
 	file, err := os.Create(archivePath)
 	if err != nil {
 		return s.setError(err)
@@ -180,15 +257,34 @@ func (s *BackupStore) RunNow() error {
 	}
 
 	s.mu.Lock()
-	s.entries = append(s.entries, BackupEntry{Path: archivePath, CreatedAt: time.Now(), SizeBytes: st.Size()})
+	for i := range s.jobs {
+		if s.jobs[i].ID == cfg.ID {
+			s.jobs[i].LastRunAt = time.Now()
+			cfg = s.jobs[i]
+			break
+		}
+	}
+	s.entries = append(s.entries, BackupEntry{JobID: cfg.ID, JobName: cfg.Name, Path: archivePath, CreatedAt: time.Now(), SizeBytes: st.Size()})
 	s.lastError = ""
-	s.enforceRetentionLocked()
+	s.enforceRetentionLocked(cfg.ID, cfg.KeepCopies)
 	s.saveLocked()
 	s.mu.Unlock()
+
 	if s.OnResult != nil {
 		s.OnResult(nil, archivePath)
 	}
 	return nil
+}
+
+func sanitizeName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "backup"
+	}
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	return name
 }
 
 func addSourceToZip(zw *zip.Writer, source string) error {
@@ -232,21 +328,28 @@ func addFileToZip(zw *zip.Writer, diskPath, archivePath string) error {
 	return err
 }
 
-func (s *BackupStore) enforceRetentionLocked() {
-	keep := s.config.KeepCopies
+func (s *BackupStore) enforceRetentionLocked(jobID string, keep int) {
 	if keep <= 0 {
 		keep = 1
 	}
-	sort.Slice(s.entries, func(i, j int) bool {
-		return s.entries[i].CreatedAt.After(s.entries[j].CreatedAt)
-	})
-	if len(s.entries) <= keep {
-		return
+	jobEntries := make([]BackupEntry, 0)
+	other := make([]BackupEntry, 0)
+	for _, e := range s.entries {
+		if e.JobID == jobID {
+			jobEntries = append(jobEntries, e)
+		} else {
+			other = append(other, e)
+		}
 	}
-	for _, old := range s.entries[keep:] {
-		_ = os.Remove(old.Path)
+	sort.Slice(jobEntries, func(i, j int) bool { return jobEntries[i].CreatedAt.After(jobEntries[j].CreatedAt) })
+	if len(jobEntries) > keep {
+		for _, old := range jobEntries[keep:] {
+			_ = os.Remove(old.Path)
+		}
+		jobEntries = jobEntries[:keep]
 	}
-	s.entries = s.entries[:keep]
+	s.entries = append(other, jobEntries...)
+	sort.Slice(s.entries, func(i, j int) bool { return s.entries[i].CreatedAt.After(s.entries[j].CreatedAt) })
 }
 
 func (s *BackupStore) setError(err error) error {

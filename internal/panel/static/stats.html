@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/chart.js"></script>
     <script src="/static/color-hash.js"></script>
+    <style>
+        .btn-icon { padding: 6px 10px; min-width: auto; line-height: 1; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); }
+        .btn-icon:hover { color: var(--accent-red); border-color: var(--accent-red); background: transparent; transform: none; }
+    </style>
 </head>
 <body>
     <nav class="nav">
@@ -427,7 +431,9 @@
                                     var action = item.banned
                                         ? '<button class="btn" data-unban-ip="' + item.ip + '">Unban</button>'
                                         : '<button class="btn btn-danger" data-ban-ip="' + item.ip + '">Ban</button>';
-                                    action += ' <button class="btn" data-remove-ip="' + item.ip + '">Remove</button>';
+                                    if (!item.banned) {
+                                        action += ' <button class="btn btn-icon" title="Remove from list" aria-label="Remove from list" data-remove-ip="' + item.ip + '">✕</button>';
+                                    }
                                     suspiciousRows += '<div class="disk-row">' +
                                         '<div class="disk-main">' +
                                             '<div class="disk-title">' + item.ip + '</div>' +

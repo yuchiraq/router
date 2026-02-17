@@ -79,6 +79,7 @@ func main() {
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
 		panelMux.HandleFunc("/backups/data", panelHandler.BackupsData)
 		panelMux.HandleFunc("/backups/config", panelHandler.SaveBackupsConfig)
+		panelMux.HandleFunc("/backups/delete", panelHandler.DeleteBackupJob)
 		panelMux.HandleFunc("/backups/run", panelHandler.RunBackupNow)
 		panelMux.HandleFunc("/notifications/data", panelHandler.NotificationsData)
 		panelMux.HandleFunc("/notifications/config", panelHandler.SaveNotificationsConfig)
