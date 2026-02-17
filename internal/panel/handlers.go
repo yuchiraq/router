@@ -13,15 +13,20 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Handler holds the dependencies for the admin panel handlers
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all connections
+	},
+}
+
+// Handler holds all dependencies for the web panel
 type Handler struct {
 	store       *storage.RuleStore
-	user        string
-	pass        string
+	username    string
+	password    string
+	templates   map[string]*template.Template
 	stats       *stats.Stats
 	broadcaster *logstream.Broadcaster
-	// templates   *template.Template
-	upgrader websocket.Upgrader
 }
 
 // NewHandler creates a new panel handler
@@ -39,20 +44,41 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 
 	return &Handler{
 		store:       store,
-		user:        user,
-		pass:        pass,
+		username:    username,
+		password:    password,
+		templates:   templates,
 		stats:       stats,
 		broadcaster: broadcaster,
-		// templates:   templates,
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-		},
 	}
 }
 
-// render executes the given template
-func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data interface{}) {
+// basicAuth is a middleware for basic authentication
+func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.username == "" && h.password == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != h.username || pass != h.password {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
+// render executes the correct template, ensuring page data is passed
+func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, data interface{}) {
+	tmpl, ok := h.templates[name]
+	if !ok {
+		http.Error(w, "Template not found", http.StatusInternalServerError)
+		return
+	}
+
+	// This structure is passed to the template
 	templateData := map[string]interface{}{
 		"Page": name,
 		"Data": data,
@@ -64,26 +90,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 	}
 }
 
-// basicAuth performs basic authentication
-func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.user == "" || h.pass == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		user, pass, ok := r.BasicAuth()
-		if !ok || user != h.user || pass != h.pass {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	}
-}
-
-// Index is the handler for the dashboard page
+// Index serves the main page with the list of rules
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -101,40 +108,46 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	}).ServeHTTP(w, r)
 }
 
-// AddRule is the handler for adding a new routing rule
-func (h *Handler) AddRule(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	host := r.FormValue("host")
-	target := r.FormValue("target")
-
-	if host == "" || target == "" {
-		http.Error(w, "Host and target are required", http.StatusBadRequest)
-		return
-	}
-
-	h.store.Add(host, target)
-	http.Redirect(w, r, "/admin/", http.StatusFound)
+// Stats serves the statistics page by sending the static HTML file
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "internal/panel/static/stats.html")
+	}).ServeHTTP(w, r)
 }
 
-// RemoveRule is the handler for removing a routing rule
+// AddRule adds a new routing rule
+func (h *Handler) AddRule(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		host := r.FormValue("host")
+		target := r.FormValue("target")
+		if host == "" || target == "" {
+			http.Error(w, "Host and target are required", http.StatusBadRequest)
+			return
+		}
+		h.store.Add(host, target)
+		http.Redirect(w, r, "/", http.StatusFound)
+	}).ServeHTTP(w, r)
+}
+
+// RemoveRule removes a routing rule
 func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	host := r.FormValue("host")
-	if host == "" {
-		http.Error(w, "Host is required", http.StatusBadRequest)
-		return
-	}
-
-	h.store.Remove(host)
-	http.Redirect(w, r, "/admin/", http.StatusFound)
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		host := r.FormValue("host")
+		if host == "" {
+			http.Error(w, "Host is required", http.StatusBadRequest)
+			return
+		}
+		h.store.Remove(host)
+		http.Redirect(w, r, "/", http.StatusFound)
+	}).ServeHTTP(w, r)
 }
 
 // RuleMaintenance toggles maintenance mode for a specific rule.
@@ -190,7 +203,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Logs is the handler for the logs WebSocket
+// Logs handles the websocket connection for logs
 func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
