@@ -7,10 +7,13 @@ import (
 )
 
 type NotificationConfig struct {
-	Enabled bool            `json:"enabled"`
-	Token   string          `json:"token"`
-	ChatID  string          `json:"chatId"`
-	Events  map[string]bool `json:"events"`
+	Enabled         bool            `json:"enabled"`
+	Token           string          `json:"token"`
+	ChatID          string          `json:"chatId"`
+	Events          map[string]bool `json:"events"`
+	QuietHoursStart int             `json:"quietHoursStart"`
+	QuietHoursEnd   int             `json:"quietHoursEnd"`
+	QuietHoursOn    bool            `json:"quietHoursOn"`
 }
 
 type NotificationStore struct {
@@ -21,7 +24,7 @@ type NotificationStore struct {
 
 func NewNotificationStore(path string) *NotificationStore {
 	s := &NotificationStore{path: path}
-	s.config = NotificationConfig{Events: map[string]bool{}}
+	s.config = NotificationConfig{Events: map[string]bool{}, QuietHoursStart: 20, QuietHoursEnd: 8}
 	s.load()
 	return s
 }
@@ -39,6 +42,12 @@ func (s *NotificationStore) load() {
 	}
 	if cfg.Events == nil {
 		cfg.Events = map[string]bool{}
+	}
+	if cfg.QuietHoursStart < 0 || cfg.QuietHoursStart > 23 {
+		cfg.QuietHoursStart = 20
+	}
+	if cfg.QuietHoursEnd < 0 || cfg.QuietHoursEnd > 23 {
+		cfg.QuietHoursEnd = 8
 	}
 	s.config = cfg
 }
@@ -66,6 +75,12 @@ func (s *NotificationStore) Update(cfg NotificationConfig) {
 		cfg.Events = map[string]bool{}
 	}
 	cfg.Events = copyEvents(cfg.Events)
+	if cfg.QuietHoursStart < 0 || cfg.QuietHoursStart > 23 {
+		cfg.QuietHoursStart = 20
+	}
+	if cfg.QuietHoursEnd < 0 || cfg.QuietHoursEnd > 23 {
+		cfg.QuietHoursEnd = 8
+	}
 	s.config = cfg
 	s.saveLocked()
 }

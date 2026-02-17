@@ -36,6 +36,9 @@ func (n *TelegramNotifier) Notify(eventKey, dedupeKey, message string) {
 	if !cfg.Events[eventKey] {
 		return
 	}
+	if inQuietHours(time.Now(), cfg.QuietHoursOn, cfg.QuietHoursStart, cfg.QuietHoursEnd) {
+		return
+	}
 	if dedupeKey != "" && n.shouldSkip(dedupeKey) {
 		return
 	}
@@ -87,4 +90,21 @@ func (n *TelegramNotifier) shouldSkip(key string) bool {
 func BuildProxyAlert(method, path, host, ip, reason string) string {
 	parts := []string{"🚨 Router alert", "reason: " + reason, "ip: " + ip, "host: " + host, "method: " + method, "path: " + path}
 	return strings.Join(parts, "\n")
+}
+
+func inQuietHours(now time.Time, enabled bool, startHour, endHour int) bool {
+	if !enabled {
+		return false
+	}
+	if startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 {
+		return false
+	}
+	h := now.Hour()
+	if startHour == endHour {
+		return true
+	}
+	if startHour < endHour {
+		return h >= startHour && h < endHour
+	}
+	return h >= startHour || h < endHour
 }

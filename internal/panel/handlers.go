@@ -478,11 +478,17 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test"} {
 			events[k] = r.FormValue("event_"+k) == "on"
 		}
+		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))
+		quietEnd, _ := strconv.Atoi(r.FormValue("quietEnd"))
+
 		h.notifyStore.Update(storage.NotificationConfig{
-			Enabled: r.FormValue("enabled") == "on",
-			Token:   strings.TrimSpace(r.FormValue("token")),
-			ChatID:  strings.TrimSpace(r.FormValue("chatId")),
-			Events:  events,
+			Enabled:         r.FormValue("enabled") == "on",
+			Token:           strings.TrimSpace(r.FormValue("token")),
+			ChatID:          strings.TrimSpace(r.FormValue("chatId")),
+			Events:          events,
+			QuietHoursOn:    r.FormValue("quietEnabled") == "on",
+			QuietHoursStart: quietStart,
+			QuietHoursEnd:   quietEnd,
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)

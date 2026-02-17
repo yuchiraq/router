@@ -34,6 +34,20 @@
             </div>
         </div>
 
+                <div class="card">
+            <div class="card-header">Quiet Hours</div>
+            <div class="card-body">
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <label><input type="checkbox" id="quietEnabled"> Do not send notifications during this period</label>
+                </div>
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <label>From hour <input class="form-control" id="quietStart" type="number" min="0" max="23" style="max-width:110px;" value="20"></label>
+                    <label>To hour <input class="form-control" id="quietEnd" type="number" min="0" max="23" style="max-width:110px;" value="8"></label>
+                </div>
+                <p style="color:var(--text-secondary); margin:0;">Example: from 20 to 8 means quiet from 20:00 to 07:59.</p>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">What to Notify About</div>
             <div class="card-body" id="events-box" style="display:grid; gap:8px;">
@@ -81,6 +95,9 @@
                             document.getElementById('enabled').checked = !!cfg.enabled;
                             document.getElementById('token').value = cfg.token || '';
                             document.getElementById('chatId').value = cfg.chatId || '';
+                            document.getElementById('quietEnabled').checked = !!cfg.quietHoursOn;
+                            document.getElementById('quietStart').value = (cfg.quietHoursStart !== undefined ? cfg.quietHoursStart : 20);
+                            document.getElementById('quietEnd').value = (cfg.quietHoursEnd !== undefined ? cfg.quietHoursEnd : 8);
                             var checks = document.querySelectorAll('[data-event]');
                             for (var i = 0; i < checks.length; i++) {
                                 var key = checks[i].getAttribute('data-event');
@@ -95,6 +112,9 @@
                     body.set('enabled', document.getElementById('enabled').checked ? 'on' : '');
                     body.set('token', document.getElementById('token').value.trim());
                     body.set('chatId', document.getElementById('chatId').value.trim());
+                    body.set('quietEnabled', document.getElementById('quietEnabled').checked ? 'on' : '');
+                    body.set('quietStart', document.getElementById('quietStart').value || '20');
+                    body.set('quietEnd', document.getElementById('quietEnd').value || '8');
                     var checks = document.querySelectorAll('[data-event]');
                     for (var i = 0; i < checks.length; i++) {
                         var key = checks[i].getAttribute('data-event');

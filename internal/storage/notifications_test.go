@@ -13,7 +13,10 @@ func TestNotificationStorePersist(t *testing.T) {
 		Enabled: true,
 		Token:   "token",
 		ChatID:  "123",
-		Events:  map[string]bool{"unknown_host": true, "test": true},
+		Events:          map[string]bool{"unknown_host": true, "test": true},
+		QuietHoursOn:    true,
+		QuietHoursStart: 20,
+		QuietHoursEnd:   8,
 	})
 
 	reloaded := NewNotificationStore(path)
@@ -23,5 +26,8 @@ func TestNotificationStorePersist(t *testing.T) {
 	}
 	if !cfg.Events["unknown_host"] || !cfg.Events["test"] {
 		t.Fatalf("unexpected events: %+v", cfg.Events)
+	}
+	if !cfg.QuietHoursOn || cfg.QuietHoursStart != 20 || cfg.QuietHoursEnd != 8 {
+		t.Fatalf("unexpected quiet hours: on=%v start=%d end=%d", cfg.QuietHoursOn, cfg.QuietHoursStart, cfg.QuietHoursEnd)
 	}
 }
