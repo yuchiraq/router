@@ -117,6 +117,25 @@ func (s *IPReputationStore) Ban(ip string) bool {
 	return true
 }
 
+func (s *IPReputationStore) Unban(ip string) bool {
+	if ip == "" {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.entries[ip]
+	if !ok || !entry.Banned {
+		return false
+	}
+
+	entry.Banned = false
+	entry.BannedAt = time.Time{}
+	s.saveLocked()
+	return true
+}
+
 func (s *IPReputationStore) IsBanned(ip string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
