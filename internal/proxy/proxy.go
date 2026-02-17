@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"router/internal/clog"
+	"router/internal/notify"
 	"router/internal/stats"
 	"router/internal/storage"
 	"strings"
@@ -18,16 +19,18 @@ type Proxy struct {
 	store           *storage.RuleStore
 	stats           *stats.Stats
 	reputation      *storage.IPReputationStore
+	notifier        *notify.TelegramNotifier
 	maintenanceTmpl *template.Template
 }
 
 // NewProxy creates a new Proxy.
-func NewProxy(store *storage.RuleStore, stats *stats.Stats, reputation *storage.IPReputationStore) *Proxy {
+func NewProxy(store *storage.RuleStore, stats *stats.Stats, reputation *storage.IPReputationStore, notifier *notify.TelegramNotifier) *Proxy {
 	maintenanceTmpl := template.Must(template.ParseFiles("internal/panel/templates/maintenance.html"))
 	return &Proxy{
 		store:           store,
 		stats:           stats,
 		reputation:      reputation,
+		notifier:        notifier,
 		maintenanceTmpl: maintenanceTmpl,
 	}
 }
@@ -37,6 +40,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	remoteIP := clientIP(r)
 	if p.reputation != nil && p.reputation.IsBanned(remoteIP) {
 		clog.Warnf("[blocked-ip] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, remoteIP)
+		if p.notifier != nil {
+			p.notifier.Notify("blocked_ip_hit", "blocked:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "blocked IP attempted request"))
+		}
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -58,12 +64,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if p.reputation != nil {
 			p.reputation.MarkSuspicious(remoteIP, "unknown host")
 		}
+		if p.notifier != nil {
+			p.notifier.Notify("unknown_host", "unknown-host:"+remoteIP+":"+r.Host, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "unknown host"))
+		}
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
 
 	if p.reputation != nil && suspiciousPath(r.URL.Path) {
 		p.reputation.MarkSuspicious(remoteIP, "suspicious path probe")
+		if p.notifier != nil {
+			p.notifier.Notify("suspicious_probe", "probe:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "suspicious path probe"))
+		}
 	}
 
 	if rule.Maintenance {

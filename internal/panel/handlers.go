@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"router/internal/logstream"
+	"router/internal/notify"
 	"router/internal/stats"
 	"router/internal/storage"
 
@@ -47,10 +48,12 @@ type Handler struct {
 	broadcaster *logstream.Broadcaster
 	ipStore     *storage.IPReputationStore
 	backupStore *storage.BackupStore
+	notifyStore *storage.NotificationStore
+	notifier    *notify.TelegramNotifier
 }
 
 // NewHandler creates a new panel handler
-func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore, backupStore *storage.BackupStore) *Handler {
+func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore, backupStore *storage.BackupStore, notifyStore *storage.NotificationStore, notifier *notify.TelegramNotifier) *Handler {
 	templates := make(map[string]*template.Template)
 
 	// Parse templates
@@ -71,6 +74,8 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		broadcaster: broadcaster,
 		ipStore:     ipStore,
 		backupStore: backupStore,
+		notifyStore: notifyStore,
+		notifier:    notifier,
 	}
 }
 
@@ -141,6 +146,13 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Backups(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "internal/panel/static/backups.html")
+	}).ServeHTTP(w, r)
+}
+
+// Notifications serves notification settings page.
+func (h *Handler) Notifications(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "internal/panel/static/notifications.html")
 	}).ServeHTTP(w, r)
 }
 
@@ -278,6 +290,185 @@ func (h *Handler) BanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.ipStore.Ban(ip)
+		if h.notifier != nil {
+			h.notifier.Notify("manual_ban", "manual-ban:"+ip, "⛔️ Manual ban\nip: "+ip)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// UnbanSuspiciousIP removes IP from ban list manually from admin panel.
+func (h *Handler) UnbanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		h.ipStore.Unban(ip)
+		if h.notifier != nil {
+			h.notifier.Notify("manual_unban", "manual-unban:"+ip, "✅ Manual unban\nip: "+ip)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// RemoveSuspiciousIP deletes IP from suspicious list manually from admin panel.
+func (h *Handler) RemoveSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		h.ipStore.Remove(ip)
+		if h.notifier != nil {
+			h.notifier.Notify("manual_remove", "manual-remove:"+ip, "🧹 Removed from suspicious list\nip: "+ip)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// BackupsData returns backup config and existing archives.
+func (h *Handler) BackupsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg, entries, lastError := h.backupStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"config":    cfg,
+			"entries":   entries,
+			"lastError": lastError,
+		})
+	}).ServeHTTP(w, r)
+}
+
+// SaveBackupsConfig updates backup settings.
+func (h *Handler) SaveBackupsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+
+		sourcesRaw := r.FormValue("sources")
+		sources := []string{}
+		for _, line := range strings.Split(sourcesRaw, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				sources = append(sources, line)
+			}
+		}
+
+		interval, _ := strconv.Atoi(r.FormValue("intervalMinutes"))
+		keep, _ := strconv.Atoi(r.FormValue("keepCopies"))
+
+		h.backupStore.UpdateConfig(storage.BackupConfig{
+			Sources:         sources,
+			DestinationDir:  strings.TrimSpace(r.FormValue("destinationDir")),
+			IntervalMinutes: interval,
+			KeepCopies:      keep,
+			Enabled:         r.FormValue("enabled") == "on",
+		})
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// RunBackupNow starts backup immediately.
+func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		if err := h.backupStore.RunNow(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// NotificationsData returns telegram settings.
+func (h *Handler) NotificationsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.notifyStore == nil {
+			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg := h.notifyStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+	}).ServeHTTP(w, r)
+}
+
+// SaveNotificationsConfig updates telegram notification settings.
+func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.notifyStore == nil {
+			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		events := map[string]bool{}
+		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test"} {
+			events[k] = r.FormValue("event_"+k) == "on"
+		}
+		h.notifyStore.Update(storage.NotificationConfig{
+			Enabled: r.FormValue("enabled") == "on",
+			Token:   strings.TrimSpace(r.FormValue("token")),
+			ChatID:  strings.TrimSpace(r.FormValue("chatId")),
+			Events:  events,
+		})
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// TestNotification sends a test telegram message.
+func (h *Handler) TestNotification(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.notifier == nil {
+			http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		if err := h.notifier.TestMessage(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)
 }

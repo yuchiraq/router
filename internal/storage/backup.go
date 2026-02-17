@@ -39,6 +39,7 @@ type BackupStore struct {
 	config    BackupConfig
 	entries   []BackupEntry
 	lastError string
+	OnResult  func(err error, archivePath string)
 }
 
 func NewBackupStore(path string) *BackupStore {
@@ -184,6 +185,9 @@ func (s *BackupStore) RunNow() error {
 	s.enforceRetentionLocked()
 	s.saveLocked()
 	s.mu.Unlock()
+	if s.OnResult != nil {
+		s.OnResult(nil, archivePath)
+	}
 	return nil
 }
 
@@ -250,5 +254,8 @@ func (s *BackupStore) setError(err error) error {
 	s.lastError = err.Error()
 	s.saveLocked()
 	s.mu.Unlock()
+	if s.OnResult != nil {
+		s.OnResult(err, "")
+	}
 	return err
 }
