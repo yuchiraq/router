@@ -1,18 +1,28 @@
 package proxy
 
 import (
+<<<<<<< HEAD
 	"html/template"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"path/filepath"
 	"router/internal/clog"
+=======
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+
+	"router/internal/logstream"
+>>>>>>> main
 	"router/internal/stats"
 	"router/internal/storage"
 )
 
-// Proxy is a reverse proxy that uses a RuleStore to determine the target.
+// Proxy is a reverse proxy that forwards requests to different targets
 type Proxy struct {
+<<<<<<< HEAD
 	store           *storage.RuleStore
 	stats           *stats.Stats
 	maintenanceTmpl *template.Template
@@ -25,11 +35,29 @@ func NewProxy(store *storage.RuleStore, stats *stats.Stats) *Proxy {
 		store:           store,
 		stats:           stats,
 		maintenanceTmpl: maintenanceTmpl,
+=======
+	store              *storage.RuleStore
+	stats              *stats.Stats
+	broadcaster        *logstream.Broadcaster
+	defaultTarget      string
+	maintenanceHandler http.HandlerFunc
+}
+
+// NewProxy creates a new Proxy
+func NewProxy(store *storage.RuleStore, stats *stats.Stats, broadcaster *logstream.Broadcaster, defaultTarget string, maintenanceHandler http.HandlerFunc) *Proxy {
+	return &Proxy{
+		store:              store,
+		stats:              stats,
+		broadcaster:        broadcaster,
+		defaultTarget:      defaultTarget,
+		maintenanceHandler: maintenanceHandler,
+>>>>>>> main
 	}
 }
 
-// ServeHTTP handles the proxying of requests.
+// ServeHTTP handles incoming requests
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+<<<<<<< HEAD
 	if p.store.MaintenanceMode {
 		clog.Infof("[maintenance-global] %s %s host=%s", r.Method, r.URL.Path, r.Host)
 		if serveMaintenanceStatic(w, r) {
@@ -66,17 +94,46 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		clog.Errorf("Error parsing target URL for host %s: %v", r.Host, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+=======
+	if p.store.IsMaintenanceMode() {
+		p.maintenanceHandler(w, r)
 		return
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	host := r.Host
+	// Strip port from host
+	if i := strings.Index(host, ":"); i != -1 {
+		host = host[:i]
+	}
 
-	// Update the request headers
-	r.URL.Host = targetURL.Host
-	r.URL.Scheme = targetURL.Scheme
-	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
-	r.Host = targetURL.Host
+	// Record request for stats
+	p.stats.AddRequest(host)
 
+	// Log the request
+	p.broadcaster.Write([]byte(host + r.URL.Path))
+
+	// Look up the target for the host
+	target, ok := p.store.Get(host)
+	if !ok {
+		// If no rule is found, use the default target if it's set
+		if p.defaultTarget != "" {
+			target = p.defaultTarget
+		} else {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+	}
+
+	// Parse the target URL
+	url, err := url.Parse(target)
+	if err != nil {
+		http.Error(w, "Invalid target URL", http.StatusInternalServerError)
+>>>>>>> main
+		return
+	}
+
+	// Create the reverse proxy
+	proxy := httputil.NewSingleHostReverseProxy(url)
 	proxy.ServeHTTP(w, r)
 }
 

@@ -3,13 +3,12 @@ package storage
 import (
 	"encoding/json"
 	"os"
-	"sync"
 )
 
-// Storage handles the reading and writing of routing rules to a file.
-type Storage struct {
-	filePath string
-	mu       sync.Mutex
+// Rule defines the structure for a routing rule
+type Rule struct {
+	Host   string `json:"host"`
+	Target string `json:"target"`
 }
 
 // storageData is the format of the data stored in the JSON file.

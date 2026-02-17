@@ -19,8 +19,7 @@ import (
 
 func main() {
 	// Initialize storage
-	fileStorage := storage.NewStorage("rules.json")
-	store := storage.NewRuleStore(fileStorage)
+	store := storage.NewRuleStore(nil)
 
 	// Initialize stats
 	stats := stats.New()
@@ -77,9 +76,9 @@ func main() {
 
 	// Autocert for automatic HTTPS certificates
 	certManager := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: store.HostPolicy, // Use the rule store to validate hosts
-		Cache:      autocert.DirCache("certs"),
+		Prompt: autocert.AcceptTOS,
+		// HostPolicy: store.HostPolicy, // Use the rule store to validate hosts
+		Cache: autocert.DirCache("certs"),
 	}
 
 	// HTTPS server

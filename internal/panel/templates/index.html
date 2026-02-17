@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {{define "title"}}Home{{end}}
 
 {{define "head"}}
@@ -78,12 +79,19 @@
     }
 </style>
 {{end}}
+=======
+>>>>>>> main
 
 {{define "content"}}
 <div class="header">
-    <h1>Rules</h1>
+    <h1>Dashboard</h1>
+    <form action="/toggle_maintenance" method="post" class="maintenance-form">
+        <label for="maintenance-mode">Maintenance Mode:</label>
+        <input type="checkbox" id="maintenance-mode" name="maintenance" onchange="this.form.submit()" {{if .MaintenanceMode}}checked{{end}}>
+    </form>
 </div>
 
+<<<<<<< HEAD
 <div class="card">
     <div class="card-header">Maintenance Mode</div>
     <div class="card-body">
@@ -105,9 +113,21 @@
             <input type="text" name="target" class="form-control" placeholder="http://localhost:3000" required>
             <button type="submit" class="btn">Add Rule</button>
         </form>
+=======
+<div class="content-grid">
+    <div class="card">
+        <div class="card-header">Add New Rule</div>
+        <div class="card-body">
+            <form action="/add" method="post" class="rule-form">
+                <input type="text" name="host" placeholder="Host (e.g., test.com)" required>
+                <input type="text" name="target" placeholder="Target (e.g., http://localhost:8080)" required>
+                <button type="submit">Add Rule</button>
+            </form>
+        </div>
+>>>>>>> main
     </div>
-</div>
 
+<<<<<<< HEAD
 <div class="card">
     <div class="card-header">Current Rules</div>
     <div class="card-body">
@@ -138,6 +158,39 @@
                 {{end}}
             {{end}}
         </ul>
+=======
+    <div class="card full-width">
+        <div class="card-header">Routing Rules</div>
+        <div class="card-body">
+            <table class="rules-table">
+                <thead>
+                    <tr>
+                        <th>Host</th>
+                        <th>Target</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $host, $target := .Rules}}
+                    <tr>
+                        <td>{{$host}}</td>
+                        <td>{{$target}}</td>
+                        <td>
+                            <form action="/remove" method="post" style="display:inline;">
+                                <input type="hidden" name="host" value="{{$host}}">
+                                <button type-="submit" class="btn-danger">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="3" class="text-center">No rules yet.</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+>>>>>>> main
     </div>
 </div>
 {{end}}
