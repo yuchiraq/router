@@ -92,8 +92,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Update the request headers
 	r.URL.Host = targetURL.Host
 	r.URL.Scheme = targetURL.Scheme
+	r.Header.Set("X-Real-IP", remoteIP)
 	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
 	r.Host = targetURL.Host
+
+	clog.Infof("[proxy-forward] %s %s src=%s host=%s -> %s", r.Method, r.URL.Path, remoteIP, r.Header.Get("X-Forwarded-Host"), targetURL.Host)
 
 	proxy.ServeHTTP(w, r)
 }
