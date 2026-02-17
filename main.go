@@ -33,6 +33,9 @@ func main() {
 	broadcaster := logstream.New()
 	log.SetOutput(logstream.NewConsoleMux(os.Stderr, broadcaster))
 
+	// Suspicious IP reputation storage
+	ipReputation := storage.NewIPReputationStore("ip_reputation.json")
+
 	// Start memory recording
 	go func() {
 		for {
@@ -51,7 +54,7 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster)
+		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
@@ -60,6 +63,7 @@ func main() {
 		panelMux.HandleFunc("/", panelHandler.Index)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
+		panelMux.HandleFunc("/stats/ban", panelHandler.BanSuspiciousIP)
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
@@ -71,7 +75,7 @@ func main() {
 	}()
 
 	// --- Proxy (Ports 80 & 443) ---
-	proxyHandler := proxy.NewProxy(store, stats)
+	proxyHandler := proxy.NewProxy(store, stats, ipReputation)
 	proxyMux := http.NewServeMux()
 	proxyMux.Handle("/", proxyHandler)
 

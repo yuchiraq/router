@@ -44,10 +44,11 @@ type Handler struct {
 	templates   map[string]*template.Template
 	stats       *stats.Stats
 	broadcaster *logstream.Broadcaster
+	ipStore     *storage.IPReputationStore
 }
 
 // NewHandler creates a new panel handler
-func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster) *Handler {
+func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore) *Handler {
 	templates := make(map[string]*template.Template)
 
 	// Parse templates
@@ -66,6 +67,7 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		templates:   templates,
 		stats:       stats,
 		broadcaster: broadcaster,
+		ipStore:     ipStore,
 	}
 }
 
@@ -192,6 +194,10 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		h.stats.RecordCPU()
 		h.stats.RecordDisks()
 		h.stats.RecordSSHConnections()
+		suspicious := []storage.SuspiciousIP{}
+		if h.ipStore != nil {
+			suspicious = h.ipStore.List()
+		}
 		requestData := h.stats.GetRequestData()
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
@@ -210,9 +216,10 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 				"labels":   cpuLabels,
 				"percents": cpuPercents,
 			},
-			"disks":     diskData,
-			"countries": countryData,
-			"ssh":       sshData,
+			"disks":      diskData,
+			"countries":  countryData,
+			"ssh":        sshData,
+			"suspicious": suspicious,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -241,5 +248,26 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+	}).ServeHTTP(w, r)
+}
+
+// BanSuspiciousIP bans suspicious IP manually from admin panel.
+func (h *Handler) BanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		h.ipStore.Ban(ip)
+		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)
 }

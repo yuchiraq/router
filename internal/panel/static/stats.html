@@ -69,6 +69,13 @@
             </div>
         </div>
 
+        <div class="card">
+            <div class="card-header">Suspicious IPs</div>
+            <div class="card-body">
+                <div class="disk-table" id="suspicious-table"></div>
+            </div>
+        </div>
+
         <script>
             (function () {
                 var memoryCanvas = document.getElementById('memory-chart');
@@ -242,6 +249,20 @@
 
 
                 // --- Data Fetching ---
+
+                function banIP(ip) {
+                    return fetch('/stats/ban', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'ip=' + encodeURIComponent(ip)
+                    }).then(function(response) {
+                        if (!response.ok) {
+                            throw new Error('failed to ban ip ' + ip);
+                        }
+                    });
+                }
+
                 function fetchData() {
                     fetch('/stats/data', { credentials: 'same-origin' })
                         .then(function(response) {
@@ -364,6 +385,39 @@
                                     '</div>';
                                 }
                                 table.innerHTML = rows || '<div class="disk-empty">No disks found.</div>';
+                            }
+
+                            if (data.suspicious) {
+                                var suspiciousTable = document.getElementById('suspicious-table');
+                                var suspiciousRows = '';
+                                for (var xi = 0; xi < data.suspicious.length; xi++) {
+                                    var item = data.suspicious[xi];
+                                    var action = item.banned
+                                        ? '<span class="country-count">banned</span>'
+                                        : '<button class="btn btn-danger" data-ban-ip="' + item.ip + '">Ban</button>';
+                                    suspiciousRows += '<div class="disk-row">' +
+                                        '<div class="disk-main">' +
+                                            '<div class="disk-title">' + item.ip + '</div>' +
+                                            '<div class="disk-subtitle">' + item.reason + ' • hits: ' + item.count + '</div>' +
+                                        '</div>' +
+                                        '<div class="disk-metrics">' +
+                                            '<div>first: ' + new Date(item.firstSeen).toLocaleString() + '</div>' +
+                                            '<div>last: ' + new Date(item.lastSeen).toLocaleString() + '</div>' +
+                                        '</div>' +
+                                        '<div>' + action + '</div>' +
+                                    '</div>';
+                                }
+                                suspiciousTable.innerHTML = suspiciousRows || '<div class="disk-empty">No suspicious IPs.</div>';
+
+                                var buttons = suspiciousTable.querySelectorAll('[data-ban-ip]');
+                                for (var bi = 0; bi < buttons.length; bi++) {
+                                    buttons[bi].addEventListener('click', function(ev) {
+                                        var ip = ev.currentTarget.getAttribute('data-ban-ip');
+                                        banIP(ip)
+                                            .then(fetchData)
+                                            .catch(function(error) { console.error(error); });
+                                    });
+                                }
                             }
                         })
                         .catch(function(error) {
