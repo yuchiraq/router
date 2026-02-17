@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"router/internal/clog"
+	"router/internal/notify"
 	"router/internal/stats"
 	"router/internal/storage"
 	"strings"
@@ -18,25 +19,30 @@ type Proxy struct {
 	store           *storage.RuleStore
 	stats           *stats.Stats
 	reputation      *storage.IPReputationStore
+	notifier        *notify.TelegramNotifier
 	maintenanceTmpl *template.Template
 }
 
 // NewProxy creates a new Proxy.
-func NewProxy(store *storage.RuleStore, stats *stats.Stats, reputation *storage.IPReputationStore) *Proxy {
+func NewProxy(store *storage.RuleStore, stats *stats.Stats, reputation *storage.IPReputationStore, notifier *notify.TelegramNotifier) *Proxy {
 	maintenanceTmpl := template.Must(template.ParseFiles("internal/panel/templates/maintenance.html"))
 	return &Proxy{
 		store:           store,
 		stats:           stats,
 		reputation:      reputation,
+		notifier:        notifier,
 		maintenanceTmpl: maintenanceTmpl,
 	}
 }
 
 // ServeHTTP handles the proxying of requests.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	remoteIP := clientIP(r.RemoteAddr)
+	remoteIP := clientIP(r)
 	if p.reputation != nil && p.reputation.IsBanned(remoteIP) {
 		clog.Warnf("[blocked-ip] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, remoteIP)
+		if p.notifier != nil {
+			p.notifier.Notify("blocked_ip_hit", "blocked:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "blocked IP attempted request"))
+		}
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -58,12 +64,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if p.reputation != nil {
 			p.reputation.MarkSuspicious(remoteIP, "unknown host")
 		}
+		if p.notifier != nil {
+			p.notifier.Notify("unknown_host", "unknown-host:"+remoteIP+":"+r.Host, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "unknown host"))
+		}
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
 
 	if p.reputation != nil && suspiciousPath(r.URL.Path) {
 		p.reputation.MarkSuspicious(remoteIP, "suspicious path probe")
+		if p.notifier != nil {
+			p.notifier.Notify("suspicious_probe", "probe:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "suspicious path probe"))
+		}
 	}
 
 	if rule.Maintenance {
@@ -92,8 +104,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Update the request headers
 	r.URL.Host = targetURL.Host
 	r.URL.Scheme = targetURL.Scheme
+	r.Header.Set("X-Real-IP", remoteIP)
 	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
+	r.Header.Set("X-Forwarded-For", appendForwardedFor(r.Header.Get("X-Forwarded-For"), remoteIP))
 	r.Host = targetURL.Host
+
+	clog.Infof("[proxy-forward] %s %s src=%s remote=%s xff=%q host=%s -> %s", r.Method, r.URL.Path, remoteIP, r.RemoteAddr, r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Forwarded-Host"), targetURL.Host)
 
 	proxy.ServeHTTP(w, r)
 }
@@ -112,12 +128,31 @@ func serveMaintenanceStatic(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func clientIP(remoteAddr string) string {
-	host, _, err := net.SplitHostPort(remoteAddr)
+func clientIP(r *http.Request) string {
+	for _, header := range []string{"CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For"} {
+		if v := strings.TrimSpace(r.Header.Get(header)); v != "" {
+			if header == "X-Forwarded-For" {
+				parts := strings.Split(v, ",")
+				if len(parts) > 0 {
+					return strings.TrimSpace(parts[0])
+				}
+			}
+			return v
+		}
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return remoteAddr
+		return r.RemoteAddr
 	}
 	return host
+}
+
+func appendForwardedFor(existing, remoteIP string) string {
+	if strings.TrimSpace(existing) == "" {
+		return remoteIP
+	}
+	return existing + ", " + remoteIP
 }
 
 func suspiciousPath(path string) bool {
