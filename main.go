@@ -35,6 +35,8 @@ func main() {
 
 	// Suspicious IP reputation storage
 	ipReputation := storage.NewIPReputationStore("ip_reputation.json")
+	backupStore := storage.NewBackupStore("backup_config.json")
+	go backupStore.Start()
 
 	// Start memory recording
 	go func() {
@@ -54,7 +56,7 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation)
+		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
@@ -62,7 +64,11 @@ func main() {
 
 		panelMux.HandleFunc("/", panelHandler.Index)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
+		panelMux.HandleFunc("/backups", panelHandler.Backups)
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
+		panelMux.HandleFunc("/backups/data", panelHandler.BackupsData)
+		panelMux.HandleFunc("/backups/config", panelHandler.SaveBackupsConfig)
+		panelMux.HandleFunc("/backups/run", panelHandler.RunBackupNow)
 		panelMux.HandleFunc("/stats/ban", panelHandler.BanSuspiciousIP)
 		panelMux.HandleFunc("/stats/unban", panelHandler.UnbanSuspiciousIP)
 		panelMux.HandleFunc("/stats/remove", panelHandler.RemoveSuspiciousIP)
