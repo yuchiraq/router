@@ -111,6 +111,42 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}
+	h.sessionsMu.Lock()
+	delete(h.sessions, token)
+	h.sessionsMu.Unlock()
+}
+
+func (h *Handler) isAuthenticated(r *http.Request) bool {
+	cookie, err := r.Cookie("router_session")
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	h.sessionsMu.RLock()
+	expiresAt, ok := h.sessions[cookie.Value]
+	h.sessionsMu.RUnlock()
+	if !ok || time.Now().After(expiresAt) {
+		return false
+	}
+	return true
+}
+
+func (h *Handler) createSession() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	token := hex.EncodeToString(b)
+	h.sessionsMu.Lock()
+	h.sessions[token] = time.Now().Add(24 * time.Hour)
+	h.sessionsMu.Unlock()
+	return token
+}
+
+func (h *Handler) invalidateSession(token string) {
+	if token == "" {
+		return
+	}
+	h.sessionsMu.Lock()
+	delete(h.sessions, token)
+	h.sessionsMu.Unlock()
 }
 
 func (h *Handler) isAuthenticated(r *http.Request) bool {
