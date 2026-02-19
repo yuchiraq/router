@@ -111,6 +111,9 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}
+	h.sessionsMu.Lock()
+	delete(h.sessions, token)
+	h.sessionsMu.Unlock()
 }
 
 func (h *Handler) isAuthenticated(r *http.Request) bool {
