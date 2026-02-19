@@ -1,6 +1,9 @@
 package notify
 
 import (
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,4 +49,61 @@ func TestHandleCallbackBanAction(t *testing.T) {
 	if ip != "" || msg != "Unauthorized chat" {
 		t.Fatalf("expected unauthorized message, got ip=%s msg=%s", ip, msg)
 	}
+}
+
+func TestNotifyUsesKnownChatIDsWhenChatIDsEmpty(t *testing.T) {
+	store := storage.NewNotificationStore(t.TempDir() + "/n.json")
+	store.Update(storage.NotificationConfig{
+		Enabled:      true,
+		Token:        "token",
+		KnownChatIDs: []int64{12345},
+		Events:       map[string]bool{"manual_ban": true},
+	})
+	n := NewTelegramNotifier(store)
+	rt := &captureTransport{}
+	n.client = &http.Client{Transport: rt}
+
+	n.Notify("manual_ban", "k1", "message")
+
+	if rt.calls != 1 {
+		t.Fatalf("expected 1 telegram call, got %d", rt.calls)
+	}
+	if !strings.Contains(rt.lastBody, "chat_id=12345") {
+		t.Fatalf("expected known chat id in request body, got %q", rt.lastBody)
+	}
+}
+
+func TestTestMessageUsesKnownChatIDs(t *testing.T) {
+	store := storage.NewNotificationStore(t.TempDir() + "/n.json")
+	store.Update(storage.NotificationConfig{Token: "token", KnownChatIDs: []int64{777}})
+	n := NewTelegramNotifier(store)
+	rt := &captureTransport{}
+	n.client = &http.Client{Transport: rt}
+
+	if err := n.TestMessage(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rt.calls != 1 {
+		t.Fatalf("expected 1 telegram call, got %d", rt.calls)
+	}
+	if !strings.Contains(rt.lastBody, "chat_id=777") {
+		t.Fatalf("expected known chat id in request body, got %q", rt.lastBody)
+	}
+}
+
+type captureTransport struct {
+	calls    int
+	lastBody string
+}
+
+func (t *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.calls++
+	b, _ := io.ReadAll(req.Body)
+	t.lastBody = string(b)
+	return &http.Response{
+		StatusCode: 200,
+		Status:     "200 OK",
+		Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+		Header:     make(http.Header),
+	}, nil
 }
