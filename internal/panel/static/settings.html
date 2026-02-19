@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - Router</title>
+    <title>Настройки GPT - Router</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -15,45 +15,83 @@
                 <a href="/stats">Stats</a>
                 <a href="/backups">Backups</a>
                 <a href="/notifications">Notifications</a>
-                <a href="/settings" class="active">Settings</a>
+                <a href="/settings" class="active">GPT Settings</a>
             </div>
         </div>
     </nav>
     <main class="container">
-        <div class="header"><h1>GPT Settings</h1></div>
+        <div class="header"><h1>Настройки GPT</h1></div>
 
         <div class="card">
-            <div class="card-header">General</div>
+            <div class="card-header">Общие параметры</div>
             <div class="card-body">
-                <div class="form-inline" style="margin-bottom:12px;">
-                    <label><input type="checkbox" id="enabled"> Enable GPT integration</label>
+                <div style="margin-bottom:16px;">
+                    <label for="enabled" style="display:block; margin-bottom:8px; font-weight:600;">
+                        <input type="checkbox" id="enabled"> Включить GPT-интеграцию
+                    </label>
+                    <p style="color:var(--text-secondary); margin:0;">
+                        Если опция включена, сервис будет использовать GPT-функции. Если выключена — GPT-настройки сохраняются,
+                        но фактически не применяются до повторного включения.
+                    </p>
                 </div>
-                <div class="form-inline" style="margin-bottom:12px;">
-                    <input class="form-control" id="apiKey" placeholder="OpenAI API key">
-                    <input class="form-control" id="model" placeholder="Model (e.g. gpt-4o-mini)">
+
+                <div style="margin-bottom:16px;">
+                    <label for="apiKey" style="display:block; margin-bottom:8px; font-weight:600;">API ключ OpenAI</label>
+                    <input class="form-control" id="apiKey" placeholder="sk-..." autocomplete="off">
+                    <p style="color:var(--text-secondary); margin:8px 0 0 0;">
+                        Секретный ключ доступа к API. Используется для авторизации запросов к модели.
+                        Рекомендуется хранить ключ приватно и периодически ротировать.
+                    </p>
+                </div>
+
+                <div>
+                    <label for="model" style="display:block; margin-bottom:8px; font-weight:600;">Модель</label>
+                    <input class="form-control" id="model" placeholder="Например: gpt-4o-mini">
+                    <p style="color:var(--text-secondary); margin:8px 0 0 0;">
+                        Идентификатор модели, к которой будут отправляться запросы. Если поле пустое,
+                        backend автоматически подставит значение по умолчанию.
+                    </p>
                 </div>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header">Behavior</div>
+            <div class="card-header">Поведение и ограничения</div>
             <div class="card-body">
-                <div class="form-inline" style="margin-bottom:12px; align-items:flex-start;">
-                    <textarea class="form-control" id="systemPrompt" placeholder="System prompt" rows="6" style="min-height:120px;"></textarea>
+                <div style="margin-bottom:16px;">
+                    <label for="systemPrompt" style="display:block; margin-bottom:8px; font-weight:600;">System Prompt</label>
+                    <textarea class="form-control" id="systemPrompt" placeholder="Опишите правила и стиль ответов модели" rows="7" style="min-height:140px;"></textarea>
+                    <p style="color:var(--text-secondary); margin:8px 0 0 0;">
+                        Базовая инструкция для модели. Здесь можно задать тон ответов, формат,
+                        ограничения по содержанию и приоритеты в обработке запросов.
+                    </p>
                 </div>
-                <div class="form-inline" style="margin-bottom:12px;">
-                    <input class="form-control" id="maxLogLines" type="number" min="1" max="500" value="20" placeholder="Max log lines in prompt">
-                    <input class="form-control" id="onlyChatIds" placeholder="Only allow chat IDs (comma separated)">
+
+                <div style="margin-bottom:16px;">
+                    <label for="maxLogLines" style="display:block; margin-bottom:8px; font-weight:600;">Max Log Lines</label>
+                    <input class="form-control" id="maxLogLines" type="number" min="1" max="500" value="20" placeholder="1-500">
+                    <p style="color:var(--text-secondary); margin:8px 0 0 0;">
+                        Максимальное число строк логов, которые попадут в контекст запроса к GPT.
+                        Большее значение улучшает контекст, но увеличивает размер запроса и стоимость.
+                    </p>
                 </div>
-                <p style="color:var(--text-secondary); margin:0;">Leave chat IDs empty to allow all chats.</p>
+
+                <div>
+                    <label for="onlyChatIds" style="display:block; margin-bottom:8px; font-weight:600;">Разрешённые Chat ID</label>
+                    <input class="form-control" id="onlyChatIds" placeholder="Например: -1001234567890, 12345678">
+                    <p style="color:var(--text-secondary); margin:8px 0 0 0;">
+                        Список чатов, которым разрешено использовать GPT-функции.
+                        Указывайте ID через запятую. Если оставить поле пустым — ограничение по чатам не применяется.
+                    </p>
+                </div>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header">Actions</div>
+            <div class="card-header">Действия</div>
             <div class="card-body">
                 <div class="form-inline">
-                    <button class="btn" id="save-btn" type="button">Save Settings</button>
+                    <button class="btn" id="save-btn" type="button">Сохранить настройки</button>
                 </div>
                 <p id="status-msg" style="margin-top:12px;color:var(--text-secondary);"></p>
             </div>
@@ -71,7 +109,7 @@
                 function loadData() {
                     return fetch('/settings/data', { credentials: 'same-origin' })
                         .then(function (response) {
-                            if (!response.ok) throw new Error('failed to load settings');
+                            if (!response.ok) throw new Error('не удалось загрузить настройки');
                             return response.json();
                         })
                         .then(function (data) {
@@ -100,10 +138,10 @@
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: body.toString()
                     }).then(function (response) {
-                        if (!response.ok) throw new Error('failed to save settings');
+                        if (!response.ok) throw new Error('не удалось сохранить настройки');
                         return response.json();
                     }).then(function () {
-                        setStatus('Settings saved.', false);
+                        setStatus('Настройки успешно сохранены.', false);
                     });
                 }
 
