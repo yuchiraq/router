@@ -236,3 +236,74 @@ go run main.go
 - audit trail действий оператора (кто и когда забанил);
 - экспорт метрик в Prometheus;
 - разделение operator/read-only ролей в панели.
+
+---
+
+## 11) Корректное определение IP за прокси
+
+В последних изменениях логика выбора client IP усилена, чтобы не банить `127.0.0.1` при проксированных атаках:
+
+- приоритет `CF-Connecting-IP` (если валиден);
+- затем публичный IP из `X-Forwarded-For`;
+- затем `X-Real-IP`;
+- если в заголовках только loopback/private, используется публичный IP из `RemoteAddr`.
+
+Это предотвращает кейсы вида:
+
+- `remote=185.177.x.x:port`
+- `X-Forwarded-For: 127.0.0.1, 127.0.0.1`
+
+где раньше в бан-лист мог попадать `127.0.0.1`.
+
+---
+
+## 12) Telegram-бот: настройки и кнопка «Забанить» (реализовано)
+
+### Что реализовано
+
+Для уведомлений `unknown_host` и `suspicious_probe` бот отправляет inline-кнопку `⛔ Ban <ip>`.
+
+В проекте добавлен webhook endpoint:
+
+- `POST /telegram/webhook`
+
+При callback от Telegram:
+
+1. проверяется заголовок `X-Telegram-Bot-Api-Secret-Token` (если задан secret);
+2. проверяется пользователь в allowlist (`allowedUserIds`, если список не пуст);
+3. из callback `ban:<ip>` валидируется IP;
+4. вызывается `ipStore.Ban(ip)`;
+5. в чат отправляется подтверждение о бане.
+
+### Настройки в панели Notifications
+
+- `Token` — токен Telegram-бота;
+- `Chat ID` — чат для уведомлений;
+- `Webhook Secret` — секрет для проверки заголовка webhook;
+- `Allowed Telegram user IDs` — список user id через запятую;
+- список событий (что отправлять);
+- quiet hours (тихий период, когда уведомления не отправляются).
+
+### Как подключить у Telegram
+
+1. Сохранить настройки в панели Notifications (`Token`, `Chat ID`, `Webhook Secret`).
+2. Указать webhook у Telegram API, например:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<token>/setWebhook" \
+  -d "url=https://<your-domain>/telegram/webhook" \
+  -d "secret_token=<Webhook Secret>"
+```
+
+3. В `allowedUserIds` добавить Telegram user id админов, которым разрешено нажимать кнопку `Ban`.
+
+
+## 13) Предложения будущих обновлений сервиса
+
+- Траст-прокси модель (`trusted_proxies`) для более строгой обработки XFF.
+- Отдельный журнал security-событий с фильтрами по IP/host/path.
+- Авто-ban по порогу (`N probes за T минут`) + временные баны.
+- Telegram action-кнопки: `Ban`, `Unban`, `Ignore 24h`.
+- Снимки конфигурации (rules/notifications/backup jobs) перед изменениями.
+- Экспорт метрик и security counters в Prometheus.
+- Ролевой доступ в панели (admin/operator/read-only).
