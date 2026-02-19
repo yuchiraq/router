@@ -132,6 +132,19 @@ func (h *Handler) render(w http.ResponseWriter, _ *http.Request, name string, da
 	}
 }
 
+func (h *Handler) serveStaticAuth(path string) http.HandlerFunc {
+	return h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, path)
+	})
+}
+
+func writeJSON(w http.ResponseWriter, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		clog.Errorf("json encode failed: %v", err)
+	}
+}
+
 // Index serves the main page with the list of rules
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -152,30 +165,22 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 
 // Stats serves the statistics page by sending the static HTML file
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "internal/panel/static/stats.html")
-	}).ServeHTTP(w, r)
+	h.serveStaticAuth("internal/panel/static/stats.html").ServeHTTP(w, r)
 }
 
 // Backups serves backup management page.
 func (h *Handler) Backups(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "internal/panel/static/backups.html")
-	}).ServeHTTP(w, r)
+	h.serveStaticAuth("internal/panel/static/backups.html").ServeHTTP(w, r)
 }
 
 // Notifications serves notification settings page.
 func (h *Handler) Notifications(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "internal/panel/static/notifications.html")
-	}).ServeHTTP(w, r)
+	h.serveStaticAuth("internal/panel/static/notifications.html").ServeHTTP(w, r)
 }
 
 // Settings serves GPT settings page.
 func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "internal/panel/static/settings.html")
-	}).ServeHTTP(w, r)
+	h.serveStaticAuth("internal/panel/static/settings.html").ServeHTTP(w, r)
 }
 
 // AddRule adds a new routing rule
@@ -422,8 +427,7 @@ func (h *Handler) SaveBackupsConfig(w http.ResponseWriter, r *http.Request) {
 			Enabled:         r.FormValue("enabled") == "on",
 		})
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"job": job})
+		writeJSON(w, map[string]interface{}{"job": job})
 	}).ServeHTTP(w, r)
 }
 
@@ -582,8 +586,7 @@ func (h *Handler) NotificationsData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cfg := h.notifyStore.Get()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+		writeJSON(w, map[string]interface{}{"config": cfg})
 	}).ServeHTTP(w, r)
 }
 
@@ -661,8 +664,7 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get(), "warning": warning})
+		writeJSON(w, map[string]interface{}{"config": h.notifyStore.Get(), "warning": warning})
 	}).ServeHTTP(w, r)
 }
 
@@ -693,8 +695,7 @@ func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cfg := h.gptStore.Get()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+		writeJSON(w, map[string]interface{}{"config": cfg})
 	}).ServeHTTP(w, r)
 }
 
@@ -733,8 +734,101 @@ func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		h.gptStore.Update(cfg)
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.gptStore.Get()})
+		writeJSON(w, map[string]interface{}{"config": h.gptStore.Get()})
+	}).ServeHTTP(w, r)
+}
+
+// Login serves and handles login form.
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		if h.isAuthenticated(r) {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		http.ServeFile(w, r, "internal/panel/static/login.html")
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.adminStore == nil {
+		http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	clientIP := clientIPFromRequest(r)
+	if retryAfter, blocked := h.checkLoginBlocked(clientIP); blocked {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+		http.Error(w, "Too many failed login attempts. Try later.", http.StatusTooManyRequests)
+		return
+	}
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	if !h.adminStore.Verify(username, password) {
+		h.registerLoginFailure(clientIP)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	h.clearLoginFailures(clientIP)
+	token := h.createSession()
+	http.SetCookie(w, &http.Cookie{Name: "router_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Logout deletes active session.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		cookie, _ := r.Cookie("router_session")
+		if cookie != nil {
+			h.invalidateSession(cookie.Value)
+		}
+		http.SetCookie(w, &http.Cookie{Name: "router_session", Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// Account serves account settings page.
+func (h *Handler) Account(w http.ResponseWriter, r *http.Request) {
+	h.serveStaticAuth("internal/panel/static/account.html").ServeHTTP(w, r)
+}
+
+// AccountData returns current account settings.
+func (h *Handler) AccountData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.adminStore == nil {
+			http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		writeJSON(w, map[string]interface{}{"username": h.adminStore.Username()})
+	}).ServeHTTP(w, r)
+}
+
+// SaveAccountConfig updates username/password.
+func (h *Handler) SaveAccountConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.adminStore == nil {
+			http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		username := strings.TrimSpace(r.FormValue("username"))
+		password := strings.TrimSpace(r.FormValue("password"))
+		if username == "" || len(password) < 6 {
+			http.Error(w, "username is required and password must be at least 6 chars", http.StatusBadRequest)
+			return
+		}
+		if !h.adminStore.Update(username, password) {
+			http.Error(w, "failed to update account", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]interface{}{"username": h.adminStore.Username()})
 	}).ServeHTTP(w, r)
 }
 
