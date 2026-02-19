@@ -1,9 +1,12 @@
 package panel
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"router/internal/clog"
 	"strconv"
@@ -108,6 +111,9 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}
+	h.sessionsMu.Lock()
+	delete(h.sessions, token)
+	h.sessionsMu.Unlock()
 }
 
 // render executes the correct template, ensuring page data is passed
