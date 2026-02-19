@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"router/internal/clog"
 	"strconv"
@@ -43,21 +44,28 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type loginAttempt struct {
+	Count       int
+	BlockedTill time.Time
+}
+
 // Handler holds all dependencies for the web panel
 type Handler struct {
-	store       *storage.RuleStore
-	adminStore  *storage.AdminStore
-	sessions    map[string]time.Time
-	sessionsMu  sync.RWMutex
-	templates   map[string]*template.Template
-	stats       *stats.Stats
-	broadcaster *logstream.Broadcaster
-	ipStore     *storage.IPReputationStore
-	backupStore *storage.BackupStore
-	notifyStore *storage.NotificationStore
-	gptStore    *storage.GPTStore
-	gptClient   *gpt.Client
-	notifier    *notify.TelegramNotifier
+	store        *storage.RuleStore
+	adminStore   *storage.AdminStore
+	sessions     map[string]time.Time
+	sessionsMu   sync.RWMutex
+	loginFails   map[string]loginAttempt
+	loginFailsMu sync.Mutex
+	templates    map[string]*template.Template
+	stats        *stats.Stats
+	broadcaster  *logstream.Broadcaster
+	ipStore      *storage.IPReputationStore
+	backupStore  *storage.BackupStore
+	notifyStore  *storage.NotificationStore
+	gptStore     *storage.GPTStore
+	gptClient    *gpt.Client
+	notifier     *notify.TelegramNotifier
 }
 
 // NewHandler creates a new panel handler
@@ -77,6 +85,7 @@ func NewHandler(store *storage.RuleStore, adminStore *storage.AdminStore, stats 
 		store:       store,
 		adminStore:  adminStore,
 		sessions:    map[string]time.Time{},
+		loginFails:  map[string]loginAttempt{},
 		templates:   templates,
 		stats:       stats,
 		broadcaster: broadcaster,
@@ -102,6 +111,9 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}
+	h.sessionsMu.Lock()
+	delete(h.sessions, token)
+	h.sessionsMu.Unlock()
 }
 
 func (h *Handler) isAuthenticated(r *http.Request) bool {
@@ -774,12 +786,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
 		return
 	}
+	clientIP := clientIPFromRequest(r)
+	if retryAfter, blocked := h.checkLoginBlocked(clientIP); blocked {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+		http.Error(w, "Too many failed login attempts. Try later.", http.StatusTooManyRequests)
+		return
+	}
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
 	if !h.adminStore.Verify(username, password) {
+		h.registerLoginFailure(clientIP)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	h.clearLoginFailures(clientIP)
 	token := h.createSession()
 	http.SetCookie(w, &http.Cookie{Name: "router_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
 	w.WriteHeader(http.StatusNoContent)
@@ -842,4 +862,66 @@ func (h *Handler) SaveAccountConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"username": h.adminStore.Username()})
 	}).ServeHTTP(w, r)
+}
+
+func clientIPFromRequest(r *http.Request) string {
+	xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+	if xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			ip := strings.TrimSpace(parts[0])
+			if addr, err := netip.ParseAddr(ip); err == nil {
+				return addr.String()
+			}
+		}
+	}
+	hostPort := strings.TrimSpace(r.RemoteAddr)
+	if hostPort == "" {
+		return "unknown"
+	}
+	if addr, err := netip.ParseAddrPort(hostPort); err == nil {
+		return addr.Addr().String()
+	}
+	if addr, err := netip.ParseAddr(hostPort); err == nil {
+		return addr.String()
+	}
+	return hostPort
+}
+
+func (h *Handler) checkLoginBlocked(ip string) (time.Duration, bool) {
+	h.loginFailsMu.Lock()
+	defer h.loginFailsMu.Unlock()
+	entry, ok := h.loginFails[ip]
+	if !ok || entry.BlockedTill.IsZero() {
+		return 0, false
+	}
+	now := time.Now()
+	if now.After(entry.BlockedTill) {
+		delete(h.loginFails, ip)
+		return 0, false
+	}
+	return time.Until(entry.BlockedTill), true
+}
+
+func (h *Handler) registerLoginFailure(ip string) {
+	h.loginFailsMu.Lock()
+	defer h.loginFailsMu.Unlock()
+	now := time.Now()
+	entry := h.loginFails[ip]
+	if !entry.BlockedTill.IsZero() && now.After(entry.BlockedTill) {
+		entry = loginAttempt{}
+	}
+	entry.Count++
+	if entry.Count >= 5 {
+		entry.BlockedTill = now.Add(1 * time.Hour)
+		entry.Count = 0
+		clog.Warnf("Login brute force protection: ip=%s blocked for 1 hour", ip)
+	}
+	h.loginFails[ip] = entry
+}
+
+func (h *Handler) clearLoginFailures(ip string) {
+	h.loginFailsMu.Lock()
+	delete(h.loginFails, ip)
+	h.loginFailsMu.Unlock()
 }
