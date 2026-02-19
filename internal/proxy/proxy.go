@@ -225,6 +225,13 @@ func appendForwardedFor(existing, remoteIP string) string {
 	return existing + ", " + remoteIP
 }
 
+func appendForwardedFor(existing, remoteIP string) string {
+	if strings.TrimSpace(existing) == "" {
+		return remoteIP
+	}
+	return existing + ", " + remoteIP
+}
+
 func suspiciousPath(path string) bool {
 	path = strings.ToLower(path)
 	probes := []string{".env", "wp-admin", "wp-login", "phpmyadmin", "adminer", "/etc/passwd", "/.git"}
