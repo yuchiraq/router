@@ -1,0 +1,14 @@
+# Runtime secrets/state
+admin.json
+notifications.json
+gpt.json
+backup_config.json
+rules.json
+ip_reputation.json
+
+# TLS/cache
+certs/
+
+# Build artifacts
+router
+*.log

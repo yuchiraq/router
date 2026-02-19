@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Router</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+        .login-card{ width:min(420px,92vw); }
+        .logo{ font-size:28px; font-weight:700; margin-bottom:12px; text-align:center; }
+    </style>
+</head>
+<body>
+    <div class="card login-card">
+        <div class="card-body">
+            <div class="logo">Router</div>
+            <p style="text-align:center;color:var(--text-secondary);margin-bottom:16px;">Вход в панель управления</p>
+            <div class="form-inline" style="margin-bottom:10px;"><input id="username" class="form-control" placeholder="Логин"></div>
+            <div class="form-inline" style="margin-bottom:10px;"><input id="password" class="form-control" type="password" placeholder="Пароль"></div>
+            <button class="btn" id="login-btn" style="width:100%;">Войти</button>
+            <p id="status" style="margin-top:10px;color:var(--accent-red);"></p>
+        </div>
+    </div>
+<script>
+(function(){
+  function setStatus(t){document.getElementById('status').textContent=t||''}
+  document.getElementById('login-btn').addEventListener('click', function(){
+    var b=new URLSearchParams();
+    b.set('username', document.getElementById('username').value.trim());
+    b.set('password', document.getElementById('password').value);
+    fetch('/login',{method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:b.toString()})
+      .then(function(r){ if(!r.ok) throw new Error('Неверный логин или пароль'); location.href='/'; })
+      .catch(function(e){ setStatus(e.message||String(e)); });
+  });
+})();
+</script>
+</body>
+</html>
