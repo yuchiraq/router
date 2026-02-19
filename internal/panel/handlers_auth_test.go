@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -29,5 +30,22 @@ func TestBlockExpires(t *testing.T) {
 	h := &Handler{loginFails: map[string]loginAttempt{"1.1.1.1": {BlockedTill: time.Now().Add(-time.Minute)}}}
 	if _, blocked := h.checkLoginBlocked("1.1.1.1"); blocked {
 		t.Fatalf("block should expire")
+	}
+}
+
+func TestSessionLifecycle(t *testing.T) {
+	h := &Handler{sessions: map[string]time.Time{}, loginFails: map[string]loginAttempt{}}
+	token := h.createSession()
+	if token == "" {
+		t.Fatalf("expected non-empty token")
+	}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.AddCookie(&http.Cookie{Name: "router_session", Value: token})
+	if !h.isAuthenticated(r) {
+		t.Fatalf("session should be authenticated")
+	}
+	h.invalidateSession(token)
+	if h.isAuthenticated(r) {
+		t.Fatalf("session should be invalidated")
 	}
 }
