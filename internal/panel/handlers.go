@@ -464,16 +464,20 @@ func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
 
 // TelegramWebhook handles bot callback actions (ban buttons).
 func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
+	clog.Infof("Telegram webhook: request received method=%s remote=%s", r.Method, r.RemoteAddr)
 	if r.Method != http.MethodPost {
+		clog.Warnf("Telegram webhook: invalid method=%s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if h.notifyStore == nil || h.notifier == nil {
+		clog.Warnf("Telegram webhook: notifier is disabled")
 		http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
 		return
 	}
 	cfg := h.notifyStore.Get()
 	if cfg.WebhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != cfg.WebhookSecret {
+		clog.Warnf("Telegram webhook: invalid secret token")
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -495,31 +499,38 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		} `json:"message"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		clog.Errorf("Telegram webhook: failed to decode update: %v", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 	if update.CallbackQuery.Data == "" {
 		if strings.TrimSpace(update.Message.Text) == "" {
+			clog.Debugf("Telegram webhook: empty text message ignored")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if h.gptClient == nil || h.notifier == nil {
+			clog.Warnf("Telegram webhook: gpt client or notifier is nil")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		chatID := update.Message.Chat.ID
 		text := strings.TrimSpace(update.Message.Text)
+		clog.Infof("Telegram webhook: incoming message chat_id=%d text_len=%d", chatID, len(text))
 		if text == "/start" || text == "/help" {
+			clog.Debugf("Telegram webhook: help command chat_id=%d", chatID)
 			_ = h.notifier.SendMessageToChat(chatID, "Привет! Я бот Router. Пишите сообщение, и я отвечу через GPT.\nКоманды: /help")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		reply, err := h.gptClient.Reply(chatID, text)
 		if err != nil {
+			clog.Errorf("Telegram webhook: gpt reply failed chat_id=%d err=%v", chatID, err)
 			_ = h.notifier.SendMessageToChat(chatID, "Ошибка GPT: "+err.Error())
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		clog.Infof("Telegram webhook: sending reply chat_id=%d reply_len=%d", chatID, len(reply))
 		_ = h.notifier.SendMessageToChat(chatID, reply)
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -601,9 +612,11 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			QuietHoursStart: quietStart,
 			QuietHoursEnd:   quietEnd,
 			WebhookSecret:   secret,
+			WebhookURL:      strings.TrimSpace(r.FormValue("webhookUrl")),
 		}
 		h.notifyStore.Update(cfg)
 
+		warning := ""
 		if cfg.Token != "" {
 			proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
 			if proto == "" {
@@ -613,17 +626,26 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 					proto = "http"
 				}
 			}
-			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
-			if h.notifier != nil {
+			webhookURL := strings.TrimSpace(cfg.WebhookURL)
+			if webhookURL == "" {
+				webhookURL = proto + "://" + r.Host + "/telegram/webhook"
+			}
+			if !strings.HasPrefix(strings.ToLower(webhookURL), "https://") {
+				warning = "Webhook not configured automatically: Telegram requires a public HTTPS URL. Set Webhook URL to https://... and save again."
+				clog.Warnf("Notifications config: skip setWebhook because URL is not HTTPS: %s", webhookURL)
+			} else if h.notifier != nil {
+				clog.Infof("Notifications config: setting telegram webhook url=%s", webhookURL)
 				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
+					clog.Errorf("Notifications config: set webhook failed: %v", err)
 					http.Error(w, "failed to set telegram webhook: "+err.Error(), http.StatusBadRequest)
 					return
 				}
+				clog.Infof("Notifications config: telegram webhook set successfully")
 			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get()})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get(), "warning": warning})
 	}).ServeHTTP(w, r)
 }
 

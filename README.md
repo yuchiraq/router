@@ -78,7 +78,13 @@
 
 ### 4.1 BasicAuth панели
 
-Если заданы `ADMIN_USER` и `ADMIN_PASS`, панель и action endpoints защищены BasicAuth.
+Панель и action endpoints всегда защищены BasicAuth.
+
+По умолчанию (если переменные не заданы):
+- `ADMIN_USER=testuser`
+- `ADMIN_PASS=testpass`
+
+Для продакшена обязательно переопределите эти значения через переменные окружения.
 
 ### 4.2 Репутация IP (JSON persistence)
 
@@ -179,7 +185,9 @@
 
 - `:80` — HTTP (ACME handler);
 - `:443` — HTTPS reverse proxy;
-- `:8162` — admin panel.
+- `127.0.0.1:8162` — admin panel по умолчанию (локально, не торчит наружу).
+
+Можно переопределить адрес панели через `PANEL_ADDR`, например `0.0.0.0:8162` (только если понимаете риски и настроили firewall/reverse proxy).
 
 TLS — `autocert` (`golang.org/x/crypto/acme/autocert`).
 
@@ -215,14 +223,17 @@ TLS — `autocert` (`golang.org/x/crypto/acme/autocert`).
 
 ```bash
 export ADMIN_USER=admin
-export ADMIN_PASS=secret
+export ADMIN_PASS=very_strong_password
+# опционально: вынести панель наружу
+# export PANEL_ADDR=0.0.0.0:8162
 
 go run main.go
 ```
 
 После запуска:
 
-- панель: `http://<host>:8162`
+- панель по умолчанию: `http://127.0.0.1:8162`
+- при `PANEL_ADDR=0.0.0.0:8162`: `http://<host>:8162`
 - прокси HTTPS: `https://<ваши-домены-из-rules.json>`
 
 ---
@@ -280,6 +291,7 @@ go run main.go
 - `Token` — токен Telegram-бота;
 - `Chat IDs` — список чатов для уведомлений (через запятую);
 - `Webhook Secret` — секрет для проверки заголовка webhook;
+- `Webhook URL` — публичный HTTPS URL для webhook (опционально, рекомендуется для локальной панели/прокси).
 - отдельный allowlist user id не нужен: доверие определяется списком `Chat IDs`;
 - список событий (что отправлять);
 - quiet hours (тихий период, когда уведомления не отправляются).
@@ -288,7 +300,7 @@ go run main.go
 
 1. Сохранить настройки в панели Notifications (`Token`, `Chat IDs`, `Webhook Secret`).
    - `Webhook Secret` можно оставить пустым: сервис сгенерирует его автоматически.
-   - после сохранения сервис автоматически выполнит `setWebhook` на `/telegram/webhook`.
+   - после сохранения сервис автоматически выполнит `setWebhook`; если `Webhook URL` заполнен, будет использован он, иначе URL собирается как `<scheme>://<host>/telegram/webhook`.
 2. Указать webhook у Telegram API, например:
 
 ```bash
