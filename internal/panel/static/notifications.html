@@ -9,13 +9,13 @@
 <body>
     <nav class="nav">
         <div class="nav-container">
-            <a href="/" class="nav-logo">Router</a>
+            <a href="/account" class="nav-logo">Router</a>
             <div class="nav-links">
                 <a href="/">Home</a>
                 <a href="/stats">Stats</a>
                 <a href="/backups">Backups</a>
                 <a href="/notifications" class="active">Notifications</a>
-                <a href="/settings">GPT Settings</a>
+                <a href="/settings">GPT</a>
             </div>
         </div>
     </nav>
@@ -34,6 +34,9 @@
                 </div>
                 <div class="form-inline" style="margin-bottom:12px;">
                     <input class="form-control" id="webhookSecret" placeholder="Webhook secret (leave empty to auto-generate)" title="Секрет для валидации webhook запросов Telegram">
+                </div>
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <input class="form-control" id="webhookUrl" placeholder="Public webhook URL (optional), e.g. https://example.com/telegram/webhook" title="Публичный HTTPS URL webhook. Если пусто, URL будет собран автоматически из текущего запроса.">
                 </div>
             </div>
         </div>
@@ -67,6 +70,29 @@
             </div>
         </div>
 
+
+        <div class="card">
+            <div class="card-header">FAQ: как запускать с Telegram на localhost</div>
+            <div class="card-body" style="display:grid; gap:12px;">
+                <div>
+                    <strong>Почему на localhost бот не отвечает через webhook?</strong>
+                    <p style="color:var(--text-secondary); margin:6px 0 0 0;">Telegram принимает webhook только на публичный <code>https://</code> URL. Адреса вида <code>http://localhost:8162</code> Telegram не вызывает.</p>
+                </div>
+                <div>
+                    <strong>Что нужно сделать, чтобы работало локально?</strong>
+                    <p style="color:var(--text-secondary); margin:6px 0 0 0;">Поднимите публичный HTTPS endpoint (например, через reverse proxy с доменом или tunnel), затем укажите его в поле <b>Webhook URL</b> в формате <code>https://ваш-домен/telegram/webhook</code> и нажмите <b>Save Notification Settings</b>.</p>
+                </div>
+                <div>
+                    <strong>Минимальные шаги настройки</strong>
+                    <ol style="margin:6px 0 0 20px; color:var(--text-secondary);">
+                        <li>Заполните <b>Token</b> и <b>Chat IDs</b>.</li>
+                        <li>Оставьте или задайте <b>Webhook Secret</b>.</li>
+                        <li>Укажите публичный <b>Webhook URL</b> с <code>https://</code>.</li>
+                        <li>Сохраните настройки и отправьте тестовое сообщение кнопкой <b>Send Test Message</b>.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
         <div class="card">
             <div class="card-header">Actions</div>
             <div class="card-body">
@@ -100,6 +126,7 @@
                             document.getElementById('token').value = cfg.token || '';
                             document.getElementById('chatIds').value = (cfg.chatIds || []).join(',');
                             document.getElementById('webhookSecret').value = cfg.webhookSecret || '';
+                            document.getElementById('webhookUrl').value = cfg.webhookUrl || '';
                             document.getElementById('quietEnabled').checked = !!cfg.quietHoursOn;
                             document.getElementById('quietStart').value = (cfg.quietHoursStart !== undefined ? cfg.quietHoursStart : 20);
                             document.getElementById('quietEnd').value = (cfg.quietHoursEnd !== undefined ? cfg.quietHoursEnd : 8);
@@ -118,6 +145,7 @@
                     body.set('token', document.getElementById('token').value.trim());
                     body.set('chatIds', document.getElementById('chatIds').value.trim());
                     body.set('webhookSecret', document.getElementById('webhookSecret').value.trim());
+                    body.set('webhookUrl', document.getElementById('webhookUrl').value.trim());
                     body.set('quietEnabled', document.getElementById('quietEnabled').checked ? 'on' : '');
                     body.set('quietStart', document.getElementById('quietStart').value || '20');
                     body.set('quietEnd', document.getElementById('quietEnd').value || '8');
@@ -132,10 +160,16 @@
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: body.toString()
                     }).then(function (response) {
-                        if (!response.ok) throw new Error('failed to save settings');
+                        if (!response.ok) {
+                            return response.text().then(function (t) { throw new Error(t || 'failed to save settings'); });
+                        }
                         return response.json().then(function(payload) {
                             if (payload && payload.config) {
                                 document.getElementById('webhookSecret').value = payload.config.webhookSecret || '';
+                            }
+                            if (payload && payload.warning) {
+                                setStatus(payload.warning, true);
+                                return;
                             }
                             setStatus('Notification settings saved and webhook configured.', false);
                         });
