@@ -25,10 +25,10 @@ func TestInQuietHours(t *testing.T) {
 
 func TestHandleCallbackBanAction(t *testing.T) {
 	store := storage.NewNotificationStore(t.TempDir() + "/n.json")
-	store.Update(storage.NotificationConfig{Token: "t", ChatID: "c", AllowedUserIDs: []int64{123}})
+	store.Update(storage.NotificationConfig{Token: "t", ChatIDs: []int64{-100123}})
 	n := NewTelegramNotifier(store)
 
-	ip, msg, err := n.HandleCallback("ban:203.0.113.10", 123)
+	ip, msg, err := n.HandleCallback("ban:203.0.113.10", -100123)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,11 +39,11 @@ func TestHandleCallbackBanAction(t *testing.T) {
 		t.Fatalf("unexpected ip: %s", ip)
 	}
 
-	ip, msg, err = n.HandleCallback("ban:203.0.113.10", 999)
+	ip, msg, err = n.HandleCallback("ban:203.0.113.10", -999)
 	if err != nil {
 		t.Fatalf("unexpected error for unauthorized: %v", err)
 	}
-	if ip != "" || msg != "Unauthorized user" {
+	if ip != "" || msg != "Unauthorized chat" {
 		t.Fatalf("expected unauthorized message, got ip=%s msg=%s", ip, msg)
 	}
 }

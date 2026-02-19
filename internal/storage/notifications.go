@@ -3,19 +3,21 @@ package storage
 import (
 	"encoding/json"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 )
 
 type NotificationConfig struct {
 	Enabled         bool            `json:"enabled"`
 	Token           string          `json:"token"`
-	ChatID          string          `json:"chatId"`
+	ChatID          string          `json:"chatId,omitempty"` // legacy migration
+	ChatIDs         []int64         `json:"chatIds"`
 	Events          map[string]bool `json:"events"`
 	QuietHoursStart int             `json:"quietHoursStart"`
 	QuietHoursEnd   int             `json:"quietHoursEnd"`
 	QuietHoursOn    bool            `json:"quietHoursOn"`
 	WebhookSecret   string          `json:"webhookSecret"`
-	AllowedUserIDs  []int64         `json:"allowedUserIds"`
 }
 
 type NotificationStore struct {
@@ -26,7 +28,7 @@ type NotificationStore struct {
 
 func NewNotificationStore(path string) *NotificationStore {
 	s := &NotificationStore{path: path}
-	s.config = NotificationConfig{Events: map[string]bool{}, QuietHoursStart: 20, QuietHoursEnd: 8}
+	s.config = NotificationConfig{Events: map[string]bool{}, QuietHoursStart: 20, QuietHoursEnd: 8, ChatIDs: []int64{}}
 	s.load()
 	return s
 }
@@ -42,20 +44,14 @@ func (s *NotificationStore) load() {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return
 	}
-	if cfg.Events == nil {
-		cfg.Events = map[string]bool{}
-	}
-	if cfg.QuietHoursStart < 0 || cfg.QuietHoursStart > 23 {
-		cfg.QuietHoursStart = 20
-	}
-	if cfg.QuietHoursEnd < 0 || cfg.QuietHoursEnd > 23 {
-		cfg.QuietHoursEnd = 8
-	}
+	normalizeNotificationConfig(&cfg)
 	s.config = cfg
 }
 
 func (s *NotificationStore) saveLocked() {
-	data, err := json.MarshalIndent(s.config, "", "  ")
+	cfg := s.config
+	cfg.ChatID = ""
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return
 	}
@@ -67,26 +63,37 @@ func (s *NotificationStore) Get() NotificationConfig {
 	defer s.mu.RUnlock()
 	cfg := s.config
 	cfg.Events = copyEvents(s.config.Events)
-	cfg.AllowedUserIDs = copyAllowedUsers(s.config.AllowedUserIDs)
+	cfg.ChatIDs = copyChatIDs(s.config.ChatIDs)
 	return cfg
 }
 
 func (s *NotificationStore) Update(cfg NotificationConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	normalizeNotificationConfig(&cfg)
+	s.config = cfg
+	s.saveLocked()
+}
+
+func normalizeNotificationConfig(cfg *NotificationConfig) {
 	if cfg.Events == nil {
 		cfg.Events = map[string]bool{}
 	}
-	cfg.Events = copyEvents(cfg.Events)
-	cfg.AllowedUserIDs = copyAllowedUsers(cfg.AllowedUserIDs)
 	if cfg.QuietHoursStart < 0 || cfg.QuietHoursStart > 23 {
 		cfg.QuietHoursStart = 20
 	}
 	if cfg.QuietHoursEnd < 0 || cfg.QuietHoursEnd > 23 {
 		cfg.QuietHoursEnd = 8
 	}
-	s.config = cfg
-	s.saveLocked()
+	chatIDs := copyChatIDs(cfg.ChatIDs)
+	if len(chatIDs) == 0 {
+		if v := strings.TrimSpace(cfg.ChatID); v != "" {
+			if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+				chatIDs = append(chatIDs, id)
+			}
+		}
+	}
+	cfg.ChatIDs = dedupeChatIDs(chatIDs)
 }
 
 func copyEvents(src map[string]bool) map[string]bool {
@@ -97,8 +104,24 @@ func copyEvents(src map[string]bool) map[string]bool {
 	return out
 }
 
-func copyAllowedUsers(src []int64) []int64 {
+func copyChatIDs(src []int64) []int64 {
 	out := make([]int64, len(src))
 	copy(out, src)
+	return out
+}
+
+func dedupeChatIDs(src []int64) []int64 {
+	seen := map[int64]struct{}{}
+	out := make([]int64, 0, len(src))
+	for _, id := range src {
+		if id == 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
 	return out
 }

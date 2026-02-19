@@ -2,6 +2,8 @@ package notify
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,7 +44,7 @@ func (n *TelegramNotifier) NotifyWithBanButton(eventKey, dedupeKey, message, ip 
 
 func (n *TelegramNotifier) notifyInternal(eventKey, dedupeKey, message, banIP string) {
 	cfg := n.store.Get()
-	if !cfg.Enabled || cfg.Token == "" || cfg.ChatID == "" {
+	if !cfg.Enabled || cfg.Token == "" || len(cfg.ChatIDs) == 0 {
 		return
 	}
 	if !cfg.Events[eventKey] {
@@ -55,47 +57,69 @@ func (n *TelegramNotifier) notifyInternal(eventKey, dedupeKey, message, banIP st
 		return
 	}
 
-	values := url.Values{}
-	values.Set("chat_id", cfg.ChatID)
-	values.Set("text", message)
-	if banIP != "" {
-		markup := map[string]interface{}{
-			"inline_keyboard": [][]map[string]string{{
-				{"text": "⛔ Ban " + banIP, "callback_data": "ban:" + banIP},
-			}},
+	for _, chatID := range cfg.ChatIDs {
+		values := url.Values{}
+		values.Set("chat_id", fmt.Sprintf("%d", chatID))
+		values.Set("text", message)
+		if banIP != "" {
+			markup := map[string]interface{}{
+				"inline_keyboard": [][]map[string]string{{
+					{"text": "⛔ Ban " + banIP, "callback_data": "ban:" + banIP},
+				}},
+			}
+			payload, _ := json.Marshal(markup)
+			values.Set("reply_markup", string(payload))
 		}
-		payload, _ := json.Marshal(markup)
-		values.Set("reply_markup", string(payload))
-	}
-	if err := n.callBot(cfg.Token, "sendMessage", values); err != nil {
-		clog.Warnf("telegram notify error: %v", err)
+		if err := n.callBot(cfg.Token, "sendMessage", values); err != nil {
+			clog.Warnf("telegram notify error: %v", err)
+		}
 	}
 }
 
 func (n *TelegramNotifier) TestMessage() error {
 	cfg := n.store.Get()
-	if cfg.Token == "" || cfg.ChatID == "" {
-		return fmt.Errorf("token and chat id are required")
+	if cfg.Token == "" || len(cfg.ChatIDs) == 0 {
+		return fmt.Errorf("token and chat ids are required")
 	}
 	n.Notify("test", "manual-test-"+time.Now().Format(time.RFC3339Nano), "✅ Router test notification")
 	return nil
 }
 
-func (n *TelegramNotifier) HandleCallback(data string, fromUserID int64) (string, string, error) {
+func (n *TelegramNotifier) EnsureWebhook(cfg storage.NotificationConfig, webhookURL string) error {
+	if cfg.Token == "" || webhookURL == "" {
+		return fmt.Errorf("token and webhook url are required")
+	}
+	values := url.Values{}
+	values.Set("url", webhookURL)
+	if cfg.WebhookSecret != "" {
+		values.Set("secret_token", cfg.WebhookSecret)
+	}
+	return n.callBot(cfg.Token, "setWebhook", values)
+}
+
+func GenerateWebhookSecret() string {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
+func (n *TelegramNotifier) HandleCallback(data string, fromChatID int64) (string, string, error) {
 	cfg := n.store.Get()
-	if cfg.Token == "" || cfg.ChatID == "" {
+	if cfg.Token == "" || len(cfg.ChatIDs) == 0 {
 		return "", "", fmt.Errorf("telegram is not configured")
 	}
-	if len(cfg.AllowedUserIDs) > 0 {
+	if len(cfg.ChatIDs) > 0 {
 		allowed := false
-		for _, uid := range cfg.AllowedUserIDs {
-			if uid == fromUserID {
+		for _, id := range cfg.ChatIDs {
+			if id == fromChatID {
 				allowed = true
 				break
 			}
 		}
 		if !allowed {
-			return "", "Unauthorized user", nil
+			return "", "Unauthorized chat", nil
 		}
 	}
 	if !strings.HasPrefix(data, "ban:") {
@@ -110,14 +134,16 @@ func (n *TelegramNotifier) HandleCallback(data string, fromUserID int64) (string
 
 func (n *TelegramNotifier) SendActionResult(text string) {
 	cfg := n.store.Get()
-	if cfg.Token == "" || cfg.ChatID == "" {
+	if cfg.Token == "" || len(cfg.ChatIDs) == 0 {
 		return
 	}
-	values := url.Values{}
-	values.Set("chat_id", cfg.ChatID)
-	values.Set("text", text)
-	if err := n.callBot(cfg.Token, "sendMessage", values); err != nil {
-		clog.Warnf("telegram action result send error: %v", err)
+	for _, chatID := range cfg.ChatIDs {
+		values := url.Values{}
+		values.Set("chat_id", fmt.Sprintf("%d", chatID))
+		values.Set("text", text)
+		if err := n.callBot(cfg.Token, "sendMessage", values); err != nil {
+			clog.Warnf("telegram action result send error: %v", err)
+		}
 	}
 }
 

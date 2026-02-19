@@ -468,10 +468,12 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 
 	var update struct {
 		CallbackQuery struct {
-			Data string `json:"data"`
-			From struct {
-				ID int64 `json:"id"`
-			} `json:"from"`
+			Data    string `json:"data"`
+			Message struct {
+				Chat struct {
+					ID int64 `json:"id"`
+				} `json:"chat"`
+			} `json:"message"`
 		} `json:"callback_query"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
@@ -483,7 +485,7 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip, replyText, err := h.notifier.HandleCallback(update.CallbackQuery.Data, update.CallbackQuery.From.ID)
+	ip, replyText, err := h.notifier.HandleCallback(update.CallbackQuery.Data, update.CallbackQuery.Message.Chat.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -534,30 +536,54 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 		}
 		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))
 		quietEnd, _ := strconv.Atoi(r.FormValue("quietEnd"))
-		allowedUsers := []int64{}
-		for _, part := range strings.Split(r.FormValue("allowedUserIds"), ",") {
+		chatIDs := []int64{}
+		for _, part := range strings.Split(r.FormValue("chatIds"), ",") {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				continue
 			}
-			uid, err := strconv.ParseInt(part, 10, 64)
+			id, err := strconv.ParseInt(part, 10, 64)
 			if err == nil {
-				allowedUsers = append(allowedUsers, uid)
+				chatIDs = append(chatIDs, id)
 			}
 		}
+		secret := strings.TrimSpace(r.FormValue("webhookSecret"))
+		if secret == "" {
+			secret = notify.GenerateWebhookSecret()
+		}
 
-		h.notifyStore.Update(storage.NotificationConfig{
+		cfg := storage.NotificationConfig{
 			Enabled:         r.FormValue("enabled") == "on",
 			Token:           strings.TrimSpace(r.FormValue("token")),
-			ChatID:          strings.TrimSpace(r.FormValue("chatId")),
+			ChatIDs:         chatIDs,
 			Events:          events,
 			QuietHoursOn:    r.FormValue("quietEnabled") == "on",
 			QuietHoursStart: quietStart,
 			QuietHoursEnd:   quietEnd,
-			WebhookSecret:   strings.TrimSpace(r.FormValue("webhookSecret")),
-			AllowedUserIDs:  allowedUsers,
-		})
-		w.WriteHeader(http.StatusNoContent)
+			WebhookSecret:   secret,
+		}
+		h.notifyStore.Update(cfg)
+
+		if cfg.Token != "" {
+			proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+			if proto == "" {
+				if r.TLS != nil {
+					proto = "https"
+				} else {
+					proto = "http"
+				}
+			}
+			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
+			if h.notifier != nil {
+				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
+					http.Error(w, "failed to set telegram webhook: "+err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get()})
 	}).ServeHTTP(w, r)
 }
 

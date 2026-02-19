@@ -270,7 +270,7 @@ go run main.go
 При callback от Telegram:
 
 1. проверяется заголовок `X-Telegram-Bot-Api-Secret-Token` (если задан secret);
-2. проверяется пользователь в allowlist (`allowedUserIds`, если список не пуст);
+2. проверяется chat id callback-сообщения: он должен входить в список `chatIds` (тот же список, куда отправляются уведомления);
 3. из callback `ban:<ip>` валидируется IP;
 4. вызывается `ipStore.Ban(ip)`;
 5. в чат отправляется подтверждение о бане.
@@ -278,15 +278,17 @@ go run main.go
 ### Настройки в панели Notifications
 
 - `Token` — токен Telegram-бота;
-- `Chat ID` — чат для уведомлений;
+- `Chat IDs` — список чатов для уведомлений (через запятую);
 - `Webhook Secret` — секрет для проверки заголовка webhook;
-- `Allowed Telegram user IDs` — список user id через запятую;
+- отдельный allowlist user id не нужен: доверие определяется списком `Chat IDs`;
 - список событий (что отправлять);
 - quiet hours (тихий период, когда уведомления не отправляются).
 
 ### Как подключить у Telegram
 
-1. Сохранить настройки в панели Notifications (`Token`, `Chat ID`, `Webhook Secret`).
+1. Сохранить настройки в панели Notifications (`Token`, `Chat IDs`, `Webhook Secret`).
+   - `Webhook Secret` можно оставить пустым: сервис сгенерирует его автоматически.
+   - после сохранения сервис автоматически выполнит `setWebhook` на `/telegram/webhook`.
 2. Указать webhook у Telegram API, например:
 
 ```bash
@@ -295,7 +297,7 @@ curl -X POST "https://api.telegram.org/bot<token>/setWebhook" \
   -d "secret_token=<Webhook Secret>"
 ```
 
-3. В `allowedUserIds` добавить Telegram user id админов, которым разрешено нажимать кнопку `Ban`.
+3. В `chatIds` укажите доверенные чаты (в эти же чаты приходят уведомления и только из них разрешены callback-действия).
 
 
 ## 13) Предложения будущих обновлений сервиса
