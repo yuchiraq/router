@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"router/internal/clog"
@@ -62,20 +63,38 @@ func main() {
 		}
 	}()
 
-	// Get admin credentials from environment variables
+	// Admin panel hardening defaults for internet-facing deployments.
 	adminUser := os.Getenv("ADMIN_USER")
 	adminPass := os.Getenv("ADMIN_PASS")
+	if adminUser == "" {
+		adminUser = "testuser"
+		clog.Warnf("ADMIN_USER is not set, using default admin user")
+	}
+	if adminPass == "" {
+		adminPass = "testpass"
+		clog.Warnf("ADMIN_PASS is not set, using default admin password")
+	}
+	panelAddr := strings.TrimSpace(os.Getenv("PANEL_ADDR"))
+	if panelAddr == "" {
+		panelAddr = "127.0.0.1:8162"
+	}
+	adminStore := storage.NewAdminStore("admin.json", adminUser, adminPass)
 
-	// --- Admin Panel (Port 8162) ---
+	// --- Admin Panel ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, gptClient, notifier)
+		panelHandler := panel.NewHandler(store, adminStore, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, gptClient, notifier)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
 		panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
 
 		panelMux.HandleFunc("/", panelHandler.Index)
+		panelMux.HandleFunc("/login", panelHandler.Login)
+		panelMux.HandleFunc("/logout", panelHandler.Logout)
+		panelMux.HandleFunc("/account", panelHandler.Account)
+		panelMux.HandleFunc("/account/data", panelHandler.AccountData)
+		panelMux.HandleFunc("/account/config", panelHandler.SaveAccountConfig)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
 		panelMux.HandleFunc("/backups", panelHandler.Backups)
 		panelMux.HandleFunc("/notifications", panelHandler.Notifications)
@@ -98,8 +117,8 @@ func main() {
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-		clog.Infof("Starting admin panel on :8162")
-		if err := http.ListenAndServe(":8162", panelMux); err != nil {
+		clog.Infof("Starting admin panel on %s", panelAddr)
+		if err := http.ListenAndServe(panelAddr, panelMux); err != nil {
 			clog.Fatalf("Failed to start admin panel: %v", err)
 		}
 	}()

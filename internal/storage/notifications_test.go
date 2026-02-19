@@ -13,6 +13,7 @@ func TestNotificationStorePersist(t *testing.T) {
 		Enabled:         true,
 		Token:           "token",
 		ChatIDs:         []int64{-100123, 777},
+		WebhookURL:      "https://router.example.com/telegram/webhook",
 		Events:          map[string]bool{"unknown_host": true, "test": true},
 		QuietHoursOn:    true,
 		QuietHoursStart: 20,
@@ -33,5 +34,8 @@ func TestNotificationStorePersist(t *testing.T) {
 	}
 	if cfg.WebhookSecret != "secret" {
 		t.Fatalf("unexpected webhook secret: %s", cfg.WebhookSecret)
+	}
+	if cfg.WebhookURL != "https://router.example.com/telegram/webhook" {
+		t.Fatalf("unexpected webhook url: %s", cfg.WebhookURL)
 	}
 }

@@ -89,12 +89,19 @@ func (n *TelegramNotifier) EnsureWebhook(cfg storage.NotificationConfig, webhook
 	if cfg.Token == "" || webhookURL == "" {
 		return fmt.Errorf("token and webhook url are required")
 	}
+	clog.Infof("telegram ensureWebhook: applying url=%s", webhookURL)
 	values := url.Values{}
 	values.Set("url", webhookURL)
 	if cfg.WebhookSecret != "" {
 		values.Set("secret_token", cfg.WebhookSecret)
 	}
-	return n.callBot(cfg.Token, "setWebhook", values)
+	err := n.callBot(cfg.Token, "setWebhook", values)
+	if err != nil {
+		clog.Errorf("telegram ensureWebhook: failed: %v", err)
+		return err
+	}
+	clog.Infof("telegram ensureWebhook: success")
+	return nil
 }
 
 func GenerateWebhookSecret() string {
@@ -160,8 +167,10 @@ func (n *TelegramNotifier) SendMessageToChat(chatID int64, text string) error {
 
 func (n *TelegramNotifier) callBot(token, method string, values url.Values) error {
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
+	clog.Debugf("telegram callBot: method=%s", method)
 	resp, err := n.client.PostForm(apiURL, values)
 	if err != nil {
+		clog.Errorf("telegram callBot: method=%s network error: %v", method, err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -169,6 +178,7 @@ func (n *TelegramNotifier) callBot(token, method string, values url.Values) erro
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("bad status: %s body=%s", resp.Status, string(bytes.TrimSpace(b)))
 	}
+	clog.Infof("telegram callBot: method=%s status=%s", method, resp.Status)
 	return nil
 }
 

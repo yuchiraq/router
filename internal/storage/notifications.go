@@ -13,6 +13,7 @@ type NotificationConfig struct {
 	Token           string          `json:"token"`
 	ChatID          string          `json:"chatId,omitempty"` // legacy migration
 	ChatIDs         []int64         `json:"chatIds"`
+	WebhookURL      string          `json:"webhookUrl"`
 	Events          map[string]bool `json:"events"`
 	QuietHoursStart int             `json:"quietHoursStart"`
 	QuietHoursEnd   int             `json:"quietHoursEnd"`
@@ -94,6 +95,7 @@ func normalizeNotificationConfig(cfg *NotificationConfig) {
 		}
 	}
 	cfg.ChatIDs = dedupeChatIDs(chatIDs)
+	cfg.WebhookURL = strings.TrimSpace(cfg.WebhookURL)
 }
 
 func copyEvents(src map[string]bool) map[string]bool {
