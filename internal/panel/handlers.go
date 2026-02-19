@@ -49,11 +49,12 @@ type Handler struct {
 	ipStore     *storage.IPReputationStore
 	backupStore *storage.BackupStore
 	notifyStore *storage.NotificationStore
+	gptStore    *storage.GPTStore
 	notifier    *notify.TelegramNotifier
 }
 
 // NewHandler creates a new panel handler
-func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore, backupStore *storage.BackupStore, notifyStore *storage.NotificationStore, notifier *notify.TelegramNotifier) *Handler {
+func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore, backupStore *storage.BackupStore, notifyStore *storage.NotificationStore, gptStore *storage.GPTStore, notifier *notify.TelegramNotifier) *Handler {
 	templates := make(map[string]*template.Template)
 
 	// Parse templates
@@ -75,6 +76,7 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 		ipStore:     ipStore,
 		backupStore: backupStore,
 		notifyStore: notifyStore,
+		gptStore:    gptStore,
 		notifier:    notifier,
 	}
 }
@@ -153,6 +155,13 @@ func (h *Handler) Backups(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Notifications(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "internal/panel/static/notifications.html")
+	}).ServeHTTP(w, r)
+}
+
+// Settings serves GPT settings page.
+func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "internal/panel/static/settings.html")
 	}).ServeHTTP(w, r)
 }
 
@@ -603,5 +612,58 @@ func (h *Handler) TestNotification(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// SettingsData returns GPT settings.
+func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.gptStore == nil {
+			http.Error(w, "gpt storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg := h.gptStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+	}).ServeHTTP(w, r)
+}
+
+// SaveSettingsConfig updates GPT settings.
+func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.gptStore == nil {
+			http.Error(w, "gpt storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+
+		maxLogLines, _ := strconv.Atoi(r.FormValue("maxLogLines"))
+		onlyChatIDs := []int64{}
+		for _, part := range strings.Split(r.FormValue("onlyChatIds"), ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			if err == nil {
+				onlyChatIDs = append(onlyChatIDs, id)
+			}
+		}
+
+		cfg := storage.GPTConfig{
+			Enabled:      r.FormValue("enabled") == "on",
+			APIKey:       strings.TrimSpace(r.FormValue("apiKey")),
+			Model:        strings.TrimSpace(r.FormValue("model")),
+			SystemPrompt: r.FormValue("systemPrompt"),
+			MaxLogLines:  maxLogLines,
+			OnlyChatIDs:  onlyChatIDs,
+		}
+		h.gptStore.Update(cfg)
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.gptStore.Get()})
 	}).ServeHTTP(w, r)
 }

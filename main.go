@@ -38,6 +38,7 @@ func main() {
 	ipReputation := storage.NewIPReputationStore("ip_reputation.json")
 	backupStore := storage.NewBackupStore("backup_config.json")
 	notifyStore := storage.NewNotificationStore("notifications.json")
+	gptStore := storage.NewGPTStore("gpt.json")
 	notifier := notify.NewTelegramNotifier(notifyStore)
 	backupStore.OnResult = func(err error, archivePath string) {
 		if err != nil {
@@ -66,7 +67,7 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore, notifyStore, notifier)
+		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, notifier)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
@@ -76,6 +77,7 @@ func main() {
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
 		panelMux.HandleFunc("/backups", panelHandler.Backups)
 		panelMux.HandleFunc("/notifications", panelHandler.Notifications)
+		panelMux.HandleFunc("/settings", panelHandler.Settings)
 		panelMux.HandleFunc("/stats/data", panelHandler.StatsData)
 		panelMux.HandleFunc("/backups/data", panelHandler.BackupsData)
 		panelMux.HandleFunc("/backups/config", panelHandler.SaveBackupsConfig)
@@ -84,6 +86,8 @@ func main() {
 		panelMux.HandleFunc("/notifications/data", panelHandler.NotificationsData)
 		panelMux.HandleFunc("/notifications/config", panelHandler.SaveNotificationsConfig)
 		panelMux.HandleFunc("/notifications/test", panelHandler.TestNotification)
+		panelMux.HandleFunc("/settings/data", panelHandler.SettingsData)
+		panelMux.HandleFunc("/settings/config", panelHandler.SaveSettingsConfig)
 		panelMux.HandleFunc("/telegram/webhook", panelHandler.TelegramWebhook)
 		panelMux.HandleFunc("/stats/ban", panelHandler.BanSuspiciousIP)
 		panelMux.HandleFunc("/stats/unban", panelHandler.UnbanSuspiciousIP)
