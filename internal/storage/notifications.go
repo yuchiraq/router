@@ -13,6 +13,8 @@ type NotificationConfig struct {
 	Token           string          `json:"token"`
 	ChatID          string          `json:"chatId,omitempty"` // legacy migration
 	ChatIDs         []int64         `json:"chatIds"`
+	KnownChatIDs    []int64         `json:"knownChatIds"`
+	WebhookURL      string          `json:"webhookUrl"`
 	Events          map[string]bool `json:"events"`
 	QuietHoursStart int             `json:"quietHoursStart"`
 	QuietHoursEnd   int             `json:"quietHoursEnd"`
@@ -64,6 +66,7 @@ func (s *NotificationStore) Get() NotificationConfig {
 	cfg := s.config
 	cfg.Events = copyEvents(s.config.Events)
 	cfg.ChatIDs = copyChatIDs(s.config.ChatIDs)
+	cfg.KnownChatIDs = copyChatIDs(s.config.KnownChatIDs)
 	return cfg
 }
 
@@ -94,6 +97,8 @@ func normalizeNotificationConfig(cfg *NotificationConfig) {
 		}
 	}
 	cfg.ChatIDs = dedupeChatIDs(chatIDs)
+	cfg.KnownChatIDs = dedupeChatIDs(cfg.KnownChatIDs)
+	cfg.WebhookURL = strings.TrimSpace(cfg.WebhookURL)
 }
 
 func copyEvents(src map[string]bool) map[string]bool {
@@ -124,4 +129,20 @@ func dedupeChatIDs(src []int64) []int64 {
 		out = append(out, id)
 	}
 	return out
+}
+
+func (s *NotificationStore) RememberKnownChatID(chatID int64) {
+	if chatID == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range s.config.KnownChatIDs {
+		if id == chatID {
+			return
+		}
+	}
+	s.config.KnownChatIDs = append(s.config.KnownChatIDs, chatID)
+	s.config.KnownChatIDs = dedupeChatIDs(s.config.KnownChatIDs)
+	s.saveLocked()
 }
