@@ -612,6 +612,7 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			QuietHoursStart: quietStart,
 			QuietHoursEnd:   quietEnd,
 			WebhookSecret:   secret,
+			WebhookURL:      strings.TrimSpace(r.FormValue("webhookUrl")),
 		}
 		h.notifyStore.Update(cfg)
 
@@ -625,9 +626,12 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 					proto = "http"
 				}
 			}
-			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
-			if !strings.EqualFold(proto, "https") {
-				warning = "Webhook not configured automatically: Telegram requires a public HTTPS URL. Set HTTPS/reverse proxy and save again."
+			webhookURL := strings.TrimSpace(cfg.WebhookURL)
+			if webhookURL == "" {
+				webhookURL = proto + "://" + r.Host + "/telegram/webhook"
+			}
+			if !strings.HasPrefix(strings.ToLower(webhookURL), "https://") {
+				warning = "Webhook not configured automatically: Telegram requires a public HTTPS URL. Set Webhook URL to https://... and save again."
 				clog.Warnf("Notifications config: skip setWebhook because URL is not HTTPS: %s", webhookURL)
 			} else if h.notifier != nil {
 				clog.Infof("Notifications config: setting telegram webhook url=%s", webhookURL)

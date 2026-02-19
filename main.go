@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"router/internal/clog"
@@ -62,11 +63,23 @@ func main() {
 		}
 	}()
 
-	// Get admin credentials from environment variables
+	// Admin panel hardening defaults for internet-facing deployments.
 	adminUser := os.Getenv("ADMIN_USER")
 	adminPass := os.Getenv("ADMIN_PASS")
+	if adminUser == "" {
+		adminUser = "testuser"
+		clog.Warnf("ADMIN_USER is not set, using default admin user")
+	}
+	if adminPass == "" {
+		adminPass = "testpass"
+		clog.Warnf("ADMIN_PASS is not set, using default admin password")
+	}
+	panelAddr := strings.TrimSpace(os.Getenv("PANEL_ADDR"))
+	if panelAddr == "" {
+		panelAddr = "127.0.0.1:8162"
+	}
 
-	// --- Admin Panel (Port 8162) ---
+	// --- Admin Panel ---
 	go func() {
 		panelMux := http.NewServeMux()
 		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, gptClient, notifier)
@@ -98,8 +111,8 @@ func main() {
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
-		clog.Infof("Starting admin panel on :8162")
-		if err := http.ListenAndServe(":8162", panelMux); err != nil {
+		clog.Infof("Starting admin panel on %s", panelAddr)
+		if err := http.ListenAndServe(panelAddr, panelMux); err != nil {
 			clog.Fatalf("Failed to start admin panel: %v", err)
 		}
 	}()
