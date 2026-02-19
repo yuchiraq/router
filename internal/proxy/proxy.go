@@ -66,7 +66,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.reputation.MarkSuspicious(remoteIP, "unknown host")
 		}
 		if p.notifier != nil {
-			p.notifier.Notify("unknown_host", "unknown-host:"+remoteIP+":"+r.Host, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "unknown host"))
+			p.notifier.NotifyWithBanButton("unknown_host", "unknown-host:"+remoteIP+":"+r.Host, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "unknown host"), remoteIP)
 		}
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
@@ -75,7 +75,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.reputation != nil && suspiciousPath(r.URL.Path) {
 		p.reputation.MarkSuspicious(remoteIP, "suspicious path probe")
 		if p.notifier != nil {
-			p.notifier.Notify("suspicious_probe", "probe:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "suspicious path probe"))
+			p.notifier.NotifyWithBanButton("suspicious_probe", "probe:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "suspicious path probe"), remoteIP)
 		}
 	}
 
@@ -216,13 +216,6 @@ func isPublicIP(ip string) bool {
 		return false
 	}
 	return true
-}
-
-func appendForwardedFor(existing, remoteIP string) string {
-	if strings.TrimSpace(existing) == "" {
-		return remoteIP
-	}
-	return existing + ", " + remoteIP
 }
 
 func appendForwardedFor(existing, remoteIP string) string {

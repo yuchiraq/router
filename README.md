@@ -257,44 +257,46 @@ go run main.go
 
 ---
 
-## 12) Telegram-бот: настройки и план кнопки «Забанить»
+## 12) Telegram-бот: настройки и кнопка «Забанить» (реализовано)
 
-### Текущие настройки в панели
+### Что реализовано
 
-Страница **Notifications** позволяет задать:
+Для уведомлений `unknown_host` и `suspicious_probe` бот отправляет inline-кнопку `⛔ Ban <ip>`.
+
+В проекте добавлен webhook endpoint:
+
+- `POST /telegram/webhook`
+
+При callback от Telegram:
+
+1. проверяется заголовок `X-Telegram-Bot-Api-Secret-Token` (если задан secret);
+2. проверяется пользователь в allowlist (`allowedUserIds`, если список не пуст);
+3. из callback `ban:<ip>` валидируется IP;
+4. вызывается `ipStore.Ban(ip)`;
+5. в чат отправляется подтверждение о бане.
+
+### Настройки в панели Notifications
 
 - `Token` — токен Telegram-бота;
-- `Chat ID` — куда отправлять уведомления;
+- `Chat ID` — чат для уведомлений;
+- `Webhook Secret` — секрет для проверки заголовка webhook;
+- `Allowed Telegram user IDs` — список user id через запятую;
 - список событий (что отправлять);
 - quiet hours (тихий период, когда уведомления не отправляются).
 
-### Предложение для кнопки «Забанить» в Telegram
+### Как подключить у Telegram
 
-Для безопасной реализации inline-кнопки в Telegram рекомендуется:
+1. Сохранить настройки в панели Notifications (`Token`, `Chat ID`, `Webhook Secret`).
+2. Указать webhook у Telegram API, например:
 
-1. В сообщении добавлять кнопку `Ban <ip>` с callback_data вида `ban:<ip>:<sig>`.
-2. Подпись `sig` делать HMAC (секрет хранить локально, не в UI).
-3. Поднять webhook endpoint (например `/telegram/webhook`) с проверкой:
-   - токена бота,
-   - подписи callback,
-   - роли отправителя (белый список Telegram user ID).
-4. При нажатии кнопки:
-   - валидировать IP,
-   - вызывать внутренний бан (`ipStore.Ban(ip)`),
-   - отправлять ответ в Telegram `IP banned`.
-5. Добавить anti-replay:
-   - TTL подписи (например 10 минут),
-   - nonce/одноразовый action-id.
+```bash
+curl -X POST "https://api.telegram.org/bot<token>/setWebhook" \
+  -d "url=https://<your-domain>/telegram/webhook" \
+  -d "secret_token=<Webhook Secret>"
+```
 
-### Минимальные поля конфигурации для этой функции
+3. В `allowedUserIds` добавить Telegram user id админов, которым разрешено нажимать кнопку `Ban`.
 
-- `telegram.botToken`
-- `telegram.defaultChatId`
-- `telegram.allowedUserIds[]`
-- `telegram.callbackSecret`
-- `telegram.webhookURL`
-
----
 
 ## 13) Предложения будущих обновлений сервиса
 

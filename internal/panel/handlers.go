@@ -450,6 +450,60 @@ func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
 	}).ServeHTTP(w, r)
 }
 
+// TelegramWebhook handles bot callback actions (ban buttons).
+func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.notifyStore == nil || h.notifier == nil {
+		http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	cfg := h.notifyStore.Get()
+	if cfg.WebhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != cfg.WebhookSecret {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	var update struct {
+		CallbackQuery struct {
+			Data string `json:"data"`
+			From struct {
+				ID int64 `json:"id"`
+			} `json:"from"`
+		} `json:"callback_query"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if update.CallbackQuery.Data == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	ip, replyText, err := h.notifier.HandleCallback(update.CallbackQuery.Data, update.CallbackQuery.From.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if ip == "" {
+		if replyText != "" {
+			h.notifier.SendActionResult("ℹ️ " + replyText)
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if h.ipStore == nil {
+		http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	h.ipStore.Ban(ip)
+	h.notifier.SendActionResult("⛔️ Banned from Telegram action\nip: " + ip)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // NotificationsData returns telegram settings.
 func (h *Handler) NotificationsData(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -480,6 +534,17 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 		}
 		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))
 		quietEnd, _ := strconv.Atoi(r.FormValue("quietEnd"))
+		allowedUsers := []int64{}
+		for _, part := range strings.Split(r.FormValue("allowedUserIds"), ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			uid, err := strconv.ParseInt(part, 10, 64)
+			if err == nil {
+				allowedUsers = append(allowedUsers, uid)
+			}
+		}
 
 		h.notifyStore.Update(storage.NotificationConfig{
 			Enabled:         r.FormValue("enabled") == "on",
@@ -489,6 +554,8 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			QuietHoursOn:    r.FormValue("quietEnabled") == "on",
 			QuietHoursStart: quietStart,
 			QuietHoursEnd:   quietEnd,
+			WebhookSecret:   strings.TrimSpace(r.FormValue("webhookSecret")),
+			AllowedUserIDs:  allowedUsers,
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)

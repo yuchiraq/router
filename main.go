@@ -84,6 +84,7 @@ func main() {
 		panelMux.HandleFunc("/notifications/data", panelHandler.NotificationsData)
 		panelMux.HandleFunc("/notifications/config", panelHandler.SaveNotificationsConfig)
 		panelMux.HandleFunc("/notifications/test", panelHandler.TestNotification)
+		panelMux.HandleFunc("/telegram/webhook", panelHandler.TelegramWebhook)
 		panelMux.HandleFunc("/stats/ban", panelHandler.BanSuspiciousIP)
 		panelMux.HandleFunc("/stats/unban", panelHandler.UnbanSuspiciousIP)
 		panelMux.HandleFunc("/stats/remove", panelHandler.RemoveSuspiciousIP)

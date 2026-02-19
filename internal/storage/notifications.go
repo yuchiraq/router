@@ -14,6 +14,8 @@ type NotificationConfig struct {
 	QuietHoursStart int             `json:"quietHoursStart"`
 	QuietHoursEnd   int             `json:"quietHoursEnd"`
 	QuietHoursOn    bool            `json:"quietHoursOn"`
+	WebhookSecret   string          `json:"webhookSecret"`
+	AllowedUserIDs  []int64         `json:"allowedUserIds"`
 }
 
 type NotificationStore struct {
@@ -65,6 +67,7 @@ func (s *NotificationStore) Get() NotificationConfig {
 	defer s.mu.RUnlock()
 	cfg := s.config
 	cfg.Events = copyEvents(s.config.Events)
+	cfg.AllowedUserIDs = copyAllowedUsers(s.config.AllowedUserIDs)
 	return cfg
 }
 
@@ -75,6 +78,7 @@ func (s *NotificationStore) Update(cfg NotificationConfig) {
 		cfg.Events = map[string]bool{}
 	}
 	cfg.Events = copyEvents(cfg.Events)
+	cfg.AllowedUserIDs = copyAllowedUsers(cfg.AllowedUserIDs)
 	if cfg.QuietHoursStart < 0 || cfg.QuietHoursStart > 23 {
 		cfg.QuietHoursStart = 20
 	}
@@ -90,5 +94,11 @@ func copyEvents(src map[string]bool) map[string]bool {
 	for k, v := range src {
 		out[k] = v
 	}
+	return out
+}
+
+func copyAllowedUsers(src []int64) []int64 {
+	out := make([]int64, len(src))
+	copy(out, src)
 	return out
 }
