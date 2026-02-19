@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"router/internal/clog"
+	"router/internal/gpt"
 	"router/internal/logstream"
 	"router/internal/notify"
 	"router/internal/panel"
@@ -39,6 +40,7 @@ func main() {
 	backupStore := storage.NewBackupStore("backup_config.json")
 	notifyStore := storage.NewNotificationStore("notifications.json")
 	gptStore := storage.NewGPTStore("gpt.json")
+	gptClient := gpt.NewClient(gptStore)
 	notifier := notify.NewTelegramNotifier(notifyStore)
 	backupStore.OnResult = func(err error, archivePath string) {
 		if err != nil {
@@ -67,7 +69,7 @@ func main() {
 	// --- Admin Panel (Port 8162) ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, notifier)
+		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, gptClient, notifier)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))

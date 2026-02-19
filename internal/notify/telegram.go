@@ -147,6 +147,17 @@ func (n *TelegramNotifier) SendActionResult(text string) {
 	}
 }
 
+func (n *TelegramNotifier) SendMessageToChat(chatID int64, text string) error {
+	cfg := n.store.Get()
+	if cfg.Token == "" {
+		return fmt.Errorf("telegram token is empty")
+	}
+	values := url.Values{}
+	values.Set("chat_id", fmt.Sprintf("%d", chatID))
+	values.Set("text", text)
+	return n.callBot(cfg.Token, "sendMessage", values)
+}
+
 func (n *TelegramNotifier) callBot(token, method string, values url.Values) error {
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
 	resp, err := n.client.PostForm(apiURL, values)

@@ -87,6 +87,29 @@
             </div>
         </div>
 
+
+        <div class="card">
+            <div class="card-header">FAQ по работе GPT-бота в Telegram</div>
+            <div class="card-body" style="display:grid; gap:14px;">
+                <div>
+                    <strong>Как начать диалог с ботом?</strong>
+                    <p style="color:var(--text-secondary); margin:6px 0 0 0;">Откройте чат с ботом в Telegram и отправьте любое сообщение. Бот ответит через GPT, если интеграция включена и настроен API ключ.</p>
+                </div>
+                <div>
+                    <strong>Почему бот не отвечает?</strong>
+                    <p style="color:var(--text-secondary); margin:6px 0 0 0;">Проверьте, что в Notifications заданы Token, Chat IDs и Webhook, а здесь включен GPT и заполнен API ключ. Также проверьте, что ваш Chat ID разрешён в поле «Разрешённые Chat ID».</p>
+                </div>
+                <div>
+                    <strong>Как ограничить доступ к GPT?</strong>
+                    <p style="color:var(--text-secondary); margin:6px 0 0 0;">Укажите список доверенных Chat ID через запятую. Если список пустой, обращаться к GPT сможет любой чат, который может писать боту.</p>
+                </div>
+                <div>
+                    <strong>Что делает System Prompt?</strong>
+                    <p style="color:var(--text-secondary); margin:6px 0 0 0;">Это глобальная инструкция модели: стиль, формат и ограничения ответов. Она применяется ко всем сообщениям пользователей.</p>
+                </div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">Действия</div>
             <div class="card-body">
