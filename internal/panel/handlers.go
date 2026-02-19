@@ -464,6 +464,7 @@ func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
 
 // TelegramWebhook handles bot callback actions (ban buttons).
 func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
+	clog.Infof("Telegram webhook: request received method=%s remote=%s", r.Method, r.RemoteAddr)
 	if r.Method != http.MethodPost {
 		clog.Warnf("Telegram webhook: invalid method=%s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -625,10 +626,13 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			}
 			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
 			if h.notifier != nil {
+				clog.Infof("Notifications config: setting telegram webhook url=%s", webhookURL)
 				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
+					clog.Errorf("Notifications config: set webhook failed: %v", err)
 					http.Error(w, "failed to set telegram webhook: "+err.Error(), http.StatusBadRequest)
 					return
 				}
+				clog.Infof("Notifications config: telegram webhook set successfully")
 			}
 		}
 
