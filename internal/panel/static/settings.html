@@ -27,7 +27,7 @@
             <div class="card-body">
                 <div style="margin-bottom:16px;">
                     <label for="enabled" style="display:block; margin-bottom:8px; font-weight:600;">
-                        <input type="checkbox" id="enabled"> Включить GPT-интеграцию
+                        <input type="checkbox" id="enabled" title="Активирует использование GPT в Telegram-диалоге"> Включить GPT-интеграцию
                     </label>
                     <p style="color:var(--text-secondary); margin:0;">
                         Если опция включена, сервис будет использовать GPT-функции. Если выключена — GPT-настройки сохраняются,
@@ -37,7 +37,7 @@
 
                 <div style="margin-bottom:16px;">
                     <label for="apiKey" style="display:block; margin-bottom:8px; font-weight:600;">API ключ OpenAI</label>
-                    <input class="form-control" id="apiKey" placeholder="sk-..." autocomplete="off">
+                    <input class="form-control" id="apiKey" placeholder="sk-..." autocomplete="off" title="API ключ OpenAI для выполнения запросов к модели">
                     <p style="color:var(--text-secondary); margin:8px 0 0 0;">
                         Секретный ключ доступа к API. Используется для авторизации запросов к модели.
                         Рекомендуется хранить ключ приватно и периодически ротировать.
@@ -46,7 +46,7 @@
 
                 <div>
                     <label for="model" style="display:block; margin-bottom:8px; font-weight:600;">Модель</label>
-                    <input class="form-control" id="model" placeholder="Например: gpt-4o-mini">
+                    <input class="form-control" id="model" placeholder="Например: gpt-4o-mini" title="Имя модели OpenAI, которая будет отвечать пользователям">
                     <p style="color:var(--text-secondary); margin:8px 0 0 0;">
                         Идентификатор модели, к которой будут отправляться запросы. Если поле пустое,
                         backend автоматически подставит значение по умолчанию.
@@ -60,7 +60,7 @@
             <div class="card-body">
                 <div style="margin-bottom:16px;">
                     <label for="systemPrompt" style="display:block; margin-bottom:8px; font-weight:600;">System Prompt</label>
-                    <textarea class="form-control" id="systemPrompt" placeholder="Опишите правила и стиль ответов модели" rows="7" style="min-height:140px;"></textarea>
+                    <textarea class="form-control" id="systemPrompt" placeholder="Опишите правила и стиль ответов модели" rows="7" style="min-height:140px;" title="Системная инструкция: задаёт роль, стиль и ограничения ответов"></textarea>
                     <p style="color:var(--text-secondary); margin:8px 0 0 0;">
                         Базовая инструкция для модели. Здесь можно задать тон ответов, формат,
                         ограничения по содержанию и приоритеты в обработке запросов.
@@ -69,7 +69,7 @@
 
                 <div style="margin-bottom:16px;">
                     <label for="maxLogLines" style="display:block; margin-bottom:8px; font-weight:600;">Max Log Lines</label>
-                    <input class="form-control" id="maxLogLines" type="number" min="1" max="500" value="20" placeholder="1-500">
+                    <input class="form-control" id="maxLogLines" type="number" min="1" max="500" value="20" placeholder="1-500" title="Сколько строк контекста максимум отправлять в GPT">
                     <p style="color:var(--text-secondary); margin:8px 0 0 0;">
                         Максимальное число строк логов, которые попадут в контекст запроса к GPT.
                         Большее значение улучшает контекст, но увеличивает размер запроса и стоимость.
@@ -78,7 +78,7 @@
 
                 <div>
                     <label for="onlyChatIds" style="display:block; margin-bottom:8px; font-weight:600;">Разрешённые Chat ID</label>
-                    <input class="form-control" id="onlyChatIds" placeholder="Например: -1001234567890, 12345678">
+                    <input class="form-control" id="onlyChatIds" placeholder="Например: -1001234567890, 12345678" title="Список Chat ID, которым разрешено общаться с GPT-ботом">
                     <p style="color:var(--text-secondary); margin:8px 0 0 0;">
                         Список чатов, которым разрешено использовать GPT-функции.
                         Указывайте ID через запятую. Если оставить поле пустым — ограничение по чатам не применяется.

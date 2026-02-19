@@ -35,16 +35,16 @@
             <div class="card-body">
                 <input type="hidden" id="job-id">
                 <div class="form-inline" style="margin-bottom:12px;">
-                    <input class="form-control" id="name" placeholder="Entry name">
-                    <label><input type="checkbox" id="enabled"> Enabled schedule</label>
+                    <input class="form-control" id="name" placeholder="Entry name" title="Понятное имя задания бэкапа">
+                    <label><input type="checkbox" id="enabled" title="Включить расписание автоматического запуска"> Enabled schedule</label>
                 </div>
                 <div class="form-inline" style="margin-bottom:12px;">
-                    <input class="form-control" id="destinationDir" placeholder="Destination folder for .zip archives">
-                    <input class="form-control" id="intervalMinutes" type="number" min="1" placeholder="Interval (minutes)">
-                    <input class="form-control" id="keepCopies" type="number" min="1" placeholder="Copies to keep">
+                    <input class="form-control" id="destinationDir" placeholder="Destination folder for .zip archives" title="Папка, куда будут складываться zip-архивы">
+                    <input class="form-control" id="intervalMinutes" type="number" min="1" placeholder="Interval (minutes)" title="Интервал автозапуска в минутах">
+                    <input class="form-control" id="keepCopies" type="number" min="1" placeholder="Copies to keep" title="Сколько последних копий хранить">
                 </div>
                 <div style="margin-bottom:12px;">
-                    <textarea class="form-control" id="sources" rows="6" placeholder="One source path per line (file or folder)"></textarea>
+                    <textarea class="form-control" id="sources" rows="6" placeholder="One source path per line (file or folder)" title="Список путей для бэкапа: по одному файлу/папке на строку"></textarea>
                 </div>
                 <div class="form-inline">
                     <button class="btn" id="save-btn" type="button">Save Entry</button>

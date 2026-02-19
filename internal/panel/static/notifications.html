@@ -26,14 +26,14 @@
             <div class="card-header">Bot Connection</div>
             <div class="card-body">
                 <div class="form-inline" style="margin-bottom:12px;">
-                    <label><input type="checkbox" id="enabled"> Enable notifications</label>
+                    <label><input type="checkbox" id="enabled" title="Включить отправку уведомлений в Telegram"> Enable notifications</label>
                 </div>
                 <div class="form-inline" style="margin-bottom:12px;">
-                    <input class="form-control" id="token" placeholder="Bot token (123456:ABC...)">
-                    <input class="form-control" id="chatIds" placeholder="Chat IDs (comma separated, e.g. -100123, -100456)">
+                    <input class="form-control" id="token" placeholder="Bot token (123456:ABC...)" title="Токен Telegram-бота от @BotFather">
+                    <input class="form-control" id="chatIds" placeholder="Chat IDs (comma separated, e.g. -100123, -100456)" title="ID чатов через запятую, куда отправлять уведомления">
                 </div>
                 <div class="form-inline" style="margin-bottom:12px;">
-                    <input class="form-control" id="webhookSecret" placeholder="Webhook secret (leave empty to auto-generate)">
+                    <input class="form-control" id="webhookSecret" placeholder="Webhook secret (leave empty to auto-generate)" title="Секрет для валидации webhook запросов Telegram">
                 </div>
             </div>
         </div>
@@ -42,11 +42,11 @@
             <div class="card-header">Quiet Hours</div>
             <div class="card-body">
                 <div class="form-inline" style="margin-bottom:12px;">
-                    <label><input type="checkbox" id="quietEnabled"> Do not send notifications during this period</label>
+                    <label><input type="checkbox" id="quietEnabled" title="Отключать отправку уведомлений в заданный период"> Do not send notifications during this period</label>
                 </div>
                 <div class="form-inline" style="margin-bottom:12px;">
-                    <label>From hour <input class="form-control" id="quietStart" type="number" min="0" max="23" style="max-width:110px;" value="20"></label>
-                    <label>To hour <input class="form-control" id="quietEnd" type="number" min="0" max="23" style="max-width:110px;" value="8"></label>
+                    <label>From hour <input class="form-control" id="quietStart" type="number" min="0" max="23" style="max-width:110px;" value="20" title="Час начала тихого периода (0-23)"></label>
+                    <label>To hour <input class="form-control" id="quietEnd" type="number" min="0" max="23" style="max-width:110px;" value="8" title="Час окончания тихого периода (0-23)"></label>
                 </div>
                 <p style="color:var(--text-secondary); margin:0;">Example: from 20 to 8 means quiet from 20:00 to 07:59.</p>
             </div>
@@ -55,15 +55,15 @@
         <div class="card">
             <div class="card-header">What to Notify About</div>
             <div class="card-body" id="events-box" style="display:grid; gap:8px;">
-                <label><input type="checkbox" data-event="unknown_host"> Unknown host requests</label>
-                <label><input type="checkbox" data-event="suspicious_probe"> Suspicious path probes</label>
-                <label><input type="checkbox" data-event="blocked_ip_hit"> Blocked IP hit attempts</label>
-                <label><input type="checkbox" data-event="manual_ban"> Manual ban actions</label>
-                <label><input type="checkbox" data-event="manual_unban"> Manual unban actions</label>
-                <label><input type="checkbox" data-event="manual_remove"> Manual suspicious IP removal</label>
-                <label><input type="checkbox" data-event="backup_success"> Backup success</label>
-                <label><input type="checkbox" data-event="backup_failure"> Backup failures</label>
-                <label><input type="checkbox" data-event="test"> Test messages</label>
+                <label><input type="checkbox" data-event="unknown_host" title="Уведомлять при запросах на неизвестные домены"> Unknown host requests</label>
+                <label><input type="checkbox" data-event="suspicious_probe" title="Уведомлять о сканировании подозрительных путей"> Suspicious path probes</label>
+                <label><input type="checkbox" data-event="blocked_ip_hit" title="Уведомлять о попытках доступа с уже заблокированных IP"> Blocked IP hit attempts</label>
+                <label><input type="checkbox" data-event="manual_ban" title="Уведомлять о ручной блокировке IP"> Manual ban actions</label>
+                <label><input type="checkbox" data-event="manual_unban" title="Уведомлять о ручной разблокировке IP"> Manual unban actions</label>
+                <label><input type="checkbox" data-event="manual_remove" title="Уведомлять об удалении IP из списка подозрительных"> Manual suspicious IP removal</label>
+                <label><input type="checkbox" data-event="backup_success" title="Уведомлять об успешном завершении бэкапа"> Backup success</label>
+                <label><input type="checkbox" data-event="backup_failure" title="Уведомлять об ошибках бэкапа"> Backup failures</label>
+                <label><input type="checkbox" data-event="test" title="Разрешить отправку тестовых сообщений"> Test messages</label>
             </div>
         </div>
 
