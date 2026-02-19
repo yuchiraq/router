@@ -1,13 +1,18 @@
 package panel
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"router/internal/clog"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"router/internal/gpt"
 	"router/internal/logstream"
@@ -37,6 +42,11 @@ var upgrader = websocket.Upgrader{
 
 		return strings.EqualFold(originURL.Host, host)
 	},
+}
+
+type loginAttempt struct {
+	Count       int
+	BlockedTill time.Time
 }
 
 // Handler holds all dependencies for the web panel
@@ -97,6 +107,9 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}
+	h.sessionsMu.Lock()
+	delete(h.sessions, token)
+	h.sessionsMu.Unlock()
 }
 
 // render executes the correct template, ensuring page data is passed
