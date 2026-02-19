@@ -615,6 +615,7 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 		}
 		h.notifyStore.Update(cfg)
 
+		warning := ""
 		if cfg.Token != "" {
 			proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
 			if proto == "" {
@@ -625,7 +626,10 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 				}
 			}
 			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
-			if h.notifier != nil {
+			if !strings.EqualFold(proto, "https") {
+				warning = "Webhook not configured automatically: Telegram requires a public HTTPS URL. Set HTTPS/reverse proxy and save again."
+				clog.Warnf("Notifications config: skip setWebhook because URL is not HTTPS: %s", webhookURL)
+			} else if h.notifier != nil {
 				clog.Infof("Notifications config: setting telegram webhook url=%s", webhookURL)
 				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
 					clog.Errorf("Notifications config: set webhook failed: %v", err)
@@ -637,7 +641,7 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get()})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get(), "warning": warning})
 	}).ServeHTTP(w, r)
 }
 

@@ -132,10 +132,16 @@
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: body.toString()
                     }).then(function (response) {
-                        if (!response.ok) throw new Error('failed to save settings');
+                        if (!response.ok) {
+                            return response.text().then(function (t) { throw new Error(t || 'failed to save settings'); });
+                        }
                         return response.json().then(function(payload) {
                             if (payload && payload.config) {
                                 document.getElementById('webhookSecret').value = payload.config.webhookSecret || '';
+                            }
+                            if (payload && payload.warning) {
+                                setStatus(payload.warning, true);
+                                return;
                             }
                             setStatus('Notification settings saved and webhook configured.', false);
                         });
