@@ -89,7 +89,7 @@
     <div class="card-body">
         <form action="/" method="post" class="maintenance-form">
             <label class="switch">
-                <input type="checkbox" name="maintenance" {{if .MaintenanceMode}}checked{{end}} onchange="this.form.submit()">
+                <input type="checkbox" name="maintenance" title="Включить или выключить глобальный режим обслуживания" {{if .MaintenanceMode}}checked{{end}} onchange="this.form.submit()">
                 <span class="slider"></span>
             </label>
             <span>Enable Maintenance Mode</span>
@@ -101,8 +101,8 @@
     <div class="card-header">Add New Rule</div>
     <div class="card-body">
         <form action="/add" method="post" class="form-inline">
-            <input type="text" name="host" class="form-control" placeholder="example.com" required>
-            <input type="text" name="target" class="form-control" placeholder="http://localhost:3000" required>
+            <input type="text" name="host" class="form-control" placeholder="example.com" title="Домен, для которого создаётся правило маршрутизации" required>
+            <input type="text" name="target" class="form-control" placeholder="http://localhost:3000" title="Целевой backend URL, куда проксируются запросы" required>
             <button type="submit" class="btn">Add Rule</button>
         </form>
     </div>
@@ -125,7 +125,7 @@
                         <form action="/rule/maintenance" method="post" style="display: inline;">
                             <input type="hidden" name="host" value="{{.Host}}">
                             <label class="switch switch-small">
-                                <input type="checkbox" name="maintenance" {{if .Maintenance}}checked{{end}} onchange="this.form.submit()">
+                                <input type="checkbox" name="maintenance" title="Включить обслуживание только для этого домена" {{if .Maintenance}}checked{{end}} onchange="this.form.submit()">
                                 <span class="slider"></span>
                             </label>
                         </form>
