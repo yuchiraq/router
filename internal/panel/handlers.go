@@ -8,6 +8,8 @@ import (
 	"router/internal/clog"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"router/internal/gpt"
 	"router/internal/logstream"
@@ -39,24 +41,32 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type loginAttempt struct {
+	Count       int
+	BlockedTill time.Time
+}
+
 // Handler holds all dependencies for the web panel
 type Handler struct {
-	store       *storage.RuleStore
-	username    string
-	password    string
-	templates   map[string]*template.Template
-	stats       *stats.Stats
-	broadcaster *logstream.Broadcaster
-	ipStore     *storage.IPReputationStore
-	backupStore *storage.BackupStore
-	notifyStore *storage.NotificationStore
-	gptStore    *storage.GPTStore
-	gptClient   *gpt.Client
-	notifier    *notify.TelegramNotifier
+	store        *storage.RuleStore
+	adminStore   *storage.AdminStore
+	sessions     map[string]time.Time
+	sessionsMu   sync.RWMutex
+	loginFails   map[string]loginAttempt
+	loginFailsMu sync.Mutex
+	templates    map[string]*template.Template
+	stats        *stats.Stats
+	broadcaster  *logstream.Broadcaster
+	ipStore      *storage.IPReputationStore
+	backupStore  *storage.BackupStore
+	notifyStore  *storage.NotificationStore
+	gptStore     *storage.GPTStore
+	gptClient    *gpt.Client
+	notifier     *notify.TelegramNotifier
 }
 
 // NewHandler creates a new panel handler
-func NewHandler(store *storage.RuleStore, username, password string, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore, backupStore *storage.BackupStore, notifyStore *storage.NotificationStore, gptStore *storage.GPTStore, gptClient *gpt.Client, notifier *notify.TelegramNotifier) *Handler {
+func NewHandler(store *storage.RuleStore, adminStore *storage.AdminStore, stats *stats.Stats, broadcaster *logstream.Broadcaster, ipStore *storage.IPReputationStore, backupStore *storage.BackupStore, notifyStore *storage.NotificationStore, gptStore *storage.GPTStore, gptClient *gpt.Client, notifier *notify.TelegramNotifier) *Handler {
 	templates := make(map[string]*template.Template)
 
 	// Parse templates
@@ -70,8 +80,9 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 
 	return &Handler{
 		store:       store,
-		username:    username,
-		password:    password,
+		adminStore:  adminStore,
+		sessions:    map[string]time.Time{},
+		loginFails:  map[string]loginAttempt{},
 		templates:   templates,
 		stats:       stats,
 		broadcaster: broadcaster,
@@ -84,21 +95,18 @@ func NewHandler(store *storage.RuleStore, username, password string, stats *stat
 	}
 }
 
-// basicAuth is a middleware for basic authentication
+// basicAuth is a middleware for session-based authentication
 func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if h.username == "" && h.password == "" {
+		if h.adminStore == nil || h.isAuthenticated(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
-
-		user, pass, ok := r.BasicAuth()
-		if !ok || user != h.username || pass != h.password {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+		if strings.Contains(r.Header.Get("Accept"), "application/json") || strings.HasPrefix(r.URL.Path, "/ws/") {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		next.ServeHTTP(w, r)
+		http.Redirect(w, r, "/login", http.StatusFound)
 	}
 }
 
@@ -464,16 +472,20 @@ func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
 
 // TelegramWebhook handles bot callback actions (ban buttons).
 func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
+	clog.Infof("Telegram webhook: request received method=%s remote=%s", r.Method, r.RemoteAddr)
 	if r.Method != http.MethodPost {
+		clog.Warnf("Telegram webhook: invalid method=%s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if h.notifyStore == nil || h.notifier == nil {
+		clog.Warnf("Telegram webhook: notifier is disabled")
 		http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
 		return
 	}
 	cfg := h.notifyStore.Get()
 	if cfg.WebhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != cfg.WebhookSecret {
+		clog.Warnf("Telegram webhook: invalid secret token")
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -495,31 +507,38 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		} `json:"message"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		clog.Errorf("Telegram webhook: failed to decode update: %v", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 	if update.CallbackQuery.Data == "" {
 		if strings.TrimSpace(update.Message.Text) == "" {
+			clog.Debugf("Telegram webhook: empty text message ignored")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if h.gptClient == nil || h.notifier == nil {
+			clog.Warnf("Telegram webhook: gpt client or notifier is nil")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		chatID := update.Message.Chat.ID
 		text := strings.TrimSpace(update.Message.Text)
+		clog.Infof("Telegram webhook: incoming message chat_id=%d text_len=%d", chatID, len(text))
 		if text == "/start" || text == "/help" {
+			clog.Debugf("Telegram webhook: help command chat_id=%d", chatID)
 			_ = h.notifier.SendMessageToChat(chatID, "Привет! Я бот Router. Пишите сообщение, и я отвечу через GPT.\nКоманды: /help")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		reply, err := h.gptClient.Reply(chatID, text)
 		if err != nil {
+			clog.Errorf("Telegram webhook: gpt reply failed chat_id=%d err=%v", chatID, err)
 			_ = h.notifier.SendMessageToChat(chatID, "Ошибка GPT: "+err.Error())
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		clog.Infof("Telegram webhook: sending reply chat_id=%d reply_len=%d", chatID, len(reply))
 		_ = h.notifier.SendMessageToChat(chatID, reply)
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -601,9 +620,11 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			QuietHoursStart: quietStart,
 			QuietHoursEnd:   quietEnd,
 			WebhookSecret:   secret,
+			WebhookURL:      strings.TrimSpace(r.FormValue("webhookUrl")),
 		}
 		h.notifyStore.Update(cfg)
 
+		warning := ""
 		if cfg.Token != "" {
 			proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
 			if proto == "" {
@@ -613,17 +634,26 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 					proto = "http"
 				}
 			}
-			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
-			if h.notifier != nil {
+			webhookURL := strings.TrimSpace(cfg.WebhookURL)
+			if webhookURL == "" {
+				webhookURL = proto + "://" + r.Host + "/telegram/webhook"
+			}
+			if !strings.HasPrefix(strings.ToLower(webhookURL), "https://") {
+				warning = "Webhook not configured automatically: Telegram requires a public HTTPS URL. Set Webhook URL to https://... and save again."
+				clog.Warnf("Notifications config: skip setWebhook because URL is not HTTPS: %s", webhookURL)
+			} else if h.notifier != nil {
+				clog.Infof("Notifications config: setting telegram webhook url=%s", webhookURL)
 				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
+					clog.Errorf("Notifications config: set webhook failed: %v", err)
 					http.Error(w, "failed to set telegram webhook: "+err.Error(), http.StatusBadRequest)
 					return
 				}
+				clog.Infof("Notifications config: telegram webhook set successfully")
 			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get()})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get(), "warning": warning})
 	}).ServeHTTP(w, r)
 }
 
@@ -696,5 +726,101 @@ func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.gptStore.Get()})
+	}).ServeHTTP(w, r)
+}
+
+// Login serves and handles login form.
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		if h.isAuthenticated(r) {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		http.ServeFile(w, r, "internal/panel/static/login.html")
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.adminStore == nil {
+		http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	clientIP := clientIPFromRequest(r)
+	if retryAfter, blocked := h.checkLoginBlocked(clientIP); blocked {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+		http.Error(w, "Too many failed login attempts. Try later.", http.StatusTooManyRequests)
+		return
+	}
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	if !h.adminStore.Verify(username, password) {
+		h.registerLoginFailure(clientIP)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	h.clearLoginFailures(clientIP)
+	token := h.createSession()
+	http.SetCookie(w, &http.Cookie{Name: "router_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Logout deletes active session.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		cookie, _ := r.Cookie("router_session")
+		if cookie != nil {
+			h.invalidateSession(cookie.Value)
+		}
+		http.SetCookie(w, &http.Cookie{Name: "router_session", Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// Account serves account settings page.
+func (h *Handler) Account(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "internal/panel/static/account.html")
+	}).ServeHTTP(w, r)
+}
+
+// AccountData returns current account settings.
+func (h *Handler) AccountData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.adminStore == nil {
+			http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"username": h.adminStore.Username()})
+	}).ServeHTTP(w, r)
+}
+
+// SaveAccountConfig updates username/password.
+func (h *Handler) SaveAccountConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.adminStore == nil {
+			http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		username := strings.TrimSpace(r.FormValue("username"))
+		password := strings.TrimSpace(r.FormValue("password"))
+		if username == "" || len(password) < 6 {
+			http.Error(w, "username is required and password must be at least 6 chars", http.StatusBadRequest)
+			return
+		}
+		if !h.adminStore.Update(username, password) {
+			http.Error(w, "failed to update account", http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"username": h.adminStore.Username()})
 	}).ServeHTTP(w, r)
 }
