@@ -78,17 +78,23 @@ func main() {
 	if panelAddr == "" {
 		panelAddr = "127.0.0.1:8162"
 	}
+	adminStore := storage.NewAdminStore("admin.json", adminUser, adminPass)
 
 	// --- Admin Panel ---
 	go func() {
 		panelMux := http.NewServeMux()
-		panelHandler := panel.NewHandler(store, adminUser, adminPass, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, gptClient, notifier)
+		panelHandler := panel.NewHandler(store, adminStore, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, gptClient, notifier)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))
 		panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
 
 		panelMux.HandleFunc("/", panelHandler.Index)
+		panelMux.HandleFunc("/login", panelHandler.Login)
+		panelMux.HandleFunc("/logout", panelHandler.Logout)
+		panelMux.HandleFunc("/account", panelHandler.Account)
+		panelMux.HandleFunc("/account/data", panelHandler.AccountData)
+		panelMux.HandleFunc("/account/config", panelHandler.SaveAccountConfig)
 		panelMux.HandleFunc("/stats", panelHandler.Stats)
 		panelMux.HandleFunc("/backups", panelHandler.Backups)
 		panelMux.HandleFunc("/notifications", panelHandler.Notifications)
