@@ -465,15 +465,18 @@ func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
 // TelegramWebhook handles bot callback actions (ban buttons).
 func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		clog.Warnf("Telegram webhook: invalid method=%s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if h.notifyStore == nil || h.notifier == nil {
+		clog.Warnf("Telegram webhook: notifier is disabled")
 		http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
 		return
 	}
 	cfg := h.notifyStore.Get()
 	if cfg.WebhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != cfg.WebhookSecret {
+		clog.Warnf("Telegram webhook: invalid secret token")
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -495,31 +498,38 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		} `json:"message"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		clog.Errorf("Telegram webhook: failed to decode update: %v", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 	if update.CallbackQuery.Data == "" {
 		if strings.TrimSpace(update.Message.Text) == "" {
+			clog.Debugf("Telegram webhook: empty text message ignored")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if h.gptClient == nil || h.notifier == nil {
+			clog.Warnf("Telegram webhook: gpt client or notifier is nil")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		chatID := update.Message.Chat.ID
 		text := strings.TrimSpace(update.Message.Text)
+		clog.Infof("Telegram webhook: incoming message chat_id=%d text_len=%d", chatID, len(text))
 		if text == "/start" || text == "/help" {
+			clog.Debugf("Telegram webhook: help command chat_id=%d", chatID)
 			_ = h.notifier.SendMessageToChat(chatID, "Привет! Я бот Router. Пишите сообщение, и я отвечу через GPT.\nКоманды: /help")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		reply, err := h.gptClient.Reply(chatID, text)
 		if err != nil {
+			clog.Errorf("Telegram webhook: gpt reply failed chat_id=%d err=%v", chatID, err)
 			_ = h.notifier.SendMessageToChat(chatID, "Ошибка GPT: "+err.Error())
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		clog.Infof("Telegram webhook: sending reply chat_id=%d reply_len=%d", chatID, len(reply))
 		_ = h.notifier.SendMessageToChat(chatID, reply)
 		w.WriteHeader(http.StatusNoContent)
 		return
