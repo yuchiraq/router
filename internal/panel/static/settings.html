@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Router</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">Router</a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/stats">Stats</a>
+                <a href="/backups">Backups</a>
+                <a href="/notifications">Notifications</a>
+                <a href="/settings" class="active">Settings</a>
+            </div>
+        </div>
+    </nav>
+    <main class="container">
+        <div class="header"><h1>GPT Settings</h1></div>
+
+        <div class="card">
+            <div class="card-header">General</div>
+            <div class="card-body">
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <label><input type="checkbox" id="enabled"> Enable GPT integration</label>
+                </div>
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <input class="form-control" id="apiKey" placeholder="OpenAI API key">
+                    <input class="form-control" id="model" placeholder="Model (e.g. gpt-4o-mini)">
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Behavior</div>
+            <div class="card-body">
+                <div class="form-inline" style="margin-bottom:12px; align-items:flex-start;">
+                    <textarea class="form-control" id="systemPrompt" placeholder="System prompt" rows="6" style="min-height:120px;"></textarea>
+                </div>
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <input class="form-control" id="maxLogLines" type="number" min="1" max="500" value="20" placeholder="Max log lines in prompt">
+                    <input class="form-control" id="onlyChatIds" placeholder="Only allow chat IDs (comma separated)">
+                </div>
+                <p style="color:var(--text-secondary); margin:0;">Leave chat IDs empty to allow all chats.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Actions</div>
+            <div class="card-body">
+                <div class="form-inline">
+                    <button class="btn" id="save-btn" type="button">Save Settings</button>
+                </div>
+                <p id="status-msg" style="margin-top:12px;color:var(--text-secondary);"></p>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                function setStatus(text, isError) {
+                    var el = document.getElementById('status-msg');
+                    if (!el) return;
+                    el.textContent = text || '';
+                    el.style.color = isError ? 'var(--accent-red)' : 'var(--text-secondary)';
+                }
+
+                function loadData() {
+                    return fetch('/settings/data', { credentials: 'same-origin' })
+                        .then(function (response) {
+                            if (!response.ok) throw new Error('failed to load settings');
+                            return response.json();
+                        })
+                        .then(function (data) {
+                            var cfg = data.config || {};
+                            document.getElementById('enabled').checked = !!cfg.enabled;
+                            document.getElementById('apiKey').value = cfg.apiKey || '';
+                            document.getElementById('model').value = cfg.model || 'gpt-4o-mini';
+                            document.getElementById('systemPrompt').value = cfg.systemPrompt || '';
+                            document.getElementById('maxLogLines').value = (cfg.maxLogLines !== undefined ? cfg.maxLogLines : 20);
+                            document.getElementById('onlyChatIds').value = (cfg.onlyChatIds || []).join(',');
+                        });
+                }
+
+                function saveData() {
+                    var body = new URLSearchParams();
+                    body.set('enabled', document.getElementById('enabled').checked ? 'on' : '');
+                    body.set('apiKey', document.getElementById('apiKey').value || '');
+                    body.set('model', document.getElementById('model').value || '');
+                    body.set('systemPrompt', document.getElementById('systemPrompt').value || '');
+                    body.set('maxLogLines', document.getElementById('maxLogLines').value || '20');
+                    body.set('onlyChatIds', document.getElementById('onlyChatIds').value || '');
+
+                    return fetch('/settings/config', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    }).then(function (response) {
+                        if (!response.ok) throw new Error('failed to save settings');
+                        return response.json();
+                    }).then(function () {
+                        setStatus('Settings saved.', false);
+                    });
+                }
+
+                document.getElementById('save-btn').addEventListener('click', function () {
+                    saveData().catch(function (err) {
+                        setStatus(err.message || String(err), true);
+                    });
+                });
+
+                loadData().catch(function (err) {
+                    setStatus(err.message || String(err), true);
+                });
+            })();
+        </script>
+    </main>
+</body>
+</html>

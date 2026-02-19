@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backups - Router</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">Router</a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/stats">Stats</a>
+                <a href="/backups" class="active">Backups</a>
+                <a href="/notifications">Notifications</a>
+                <a href="/settings">Settings</a>
+            </div>
+        </div>
+    </nav>
+    <main class="container">
+        <div class="header"><h1>Backups</h1></div>
+
+        <div class="card">
+            <div class="card-header">Backup Entries</div>
+            <div class="card-body">
+                <div id="jobs-table" class="disk-table" style="margin-bottom:12px;"></div>
+                <button class="btn" id="new-job-btn" type="button">New Entry</button>
+            </div>
+        </div>
+
+        <div class="card" id="settings-card" style="display:none;">
+            <div class="card-header">Entry Settings</div>
+            <div class="card-body">
+                <input type="hidden" id="job-id">
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <input class="form-control" id="name" placeholder="Entry name">
+                    <label><input type="checkbox" id="enabled"> Enabled schedule</label>
+                </div>
+                <div class="form-inline" style="margin-bottom:12px;">
+                    <input class="form-control" id="destinationDir" placeholder="Destination folder for .zip archives">
+                    <input class="form-control" id="intervalMinutes" type="number" min="1" placeholder="Interval (minutes)">
+                    <input class="form-control" id="keepCopies" type="number" min="1" placeholder="Copies to keep">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <textarea class="form-control" id="sources" rows="6" placeholder="One source path per line (file or folder)"></textarea>
+                </div>
+                <div class="form-inline">
+                    <button class="btn" id="save-btn" type="button">Save Entry</button>
+                    <button class="btn" id="run-btn" type="button">Run Selected Entry Now</button>
+                    <button class="btn btn-danger" id="delete-btn" type="button">Delete Entry</button>
+                </div>
+                <p id="status-msg" style="margin-top:12px;color:var(--text-secondary);"></p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Backup Archives</div>
+            <div class="card-body">
+                <div class="disk-table" id="backups-table"></div>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                var state = { jobs: [], entries: [], selectedId: '' };
+
+                function setStatus(text, isError) {
+                    var el = document.getElementById('status-msg');
+                    el.textContent = text || '';
+                    el.style.color = isError ? 'var(--accent-red)' : 'var(--text-secondary)';
+                }
+
+                function showSettings() {
+                    document.getElementById("settings-card").style.display = "block";
+                }
+
+                function hideSettings() {
+                    document.getElementById("settings-card").style.display = "none";
+                }
+
+                function clearForm() {
+                    document.getElementById('job-id').value = '';
+                    document.getElementById('name').value = '';
+                    document.getElementById('enabled').checked = false;
+                    document.getElementById('destinationDir').value = '';
+                    document.getElementById('intervalMinutes').value = 60;
+                    document.getElementById('keepCopies').value = 10;
+                    document.getElementById('sources').value = '';
+                    state.selectedId = '';
+                }
+
+                function fillForm(job) {
+                    if (!job) {
+                        clearForm();
+                        return;
+                    }
+                    document.getElementById('job-id').value = job.id || '';
+                    document.getElementById('name').value = job.name || '';
+                    document.getElementById('enabled').checked = !!job.enabled;
+                    document.getElementById('destinationDir').value = job.destinationDir || '';
+                    document.getElementById('intervalMinutes').value = job.intervalMinutes || 60;
+                    document.getElementById('keepCopies').value = job.keepCopies || 10;
+                    document.getElementById('sources').value = (job.sources || []).join('\n');
+                    state.selectedId = job.id || '';
+                }
+
+                function renderJobs() {
+                    var table = document.getElementById('jobs-table');
+                    var rows = '';
+                    for (var i = 0; i < state.jobs.length; i++) {
+                        var j = state.jobs[i];
+                        rows += '<div class="disk-row">' +
+                            '<div class="disk-main">' +
+                                '<div class="disk-title">' + (j.name || j.id) + '</div>' +
+                                '<div class="disk-subtitle">' + (j.enabled ? 'enabled' : 'disabled') + ' • every ' + (j.intervalMinutes || 60) + ' min • keep ' + (j.keepCopies || 10) + '</div>' +
+                            '</div>' +
+                            '<div><button class="btn" data-select-id="' + j.id + '">Edit</button></div>' +
+                        '</div>';
+                    }
+                    table.innerHTML = rows || '<div class="disk-empty">No backup entries yet.</div>';
+
+                    var buttons = table.querySelectorAll('[data-select-id]');
+                    for (var bi = 0; bi < buttons.length; bi++) {
+                        buttons[bi].addEventListener('click', function (ev) {
+                            var id = ev.currentTarget.getAttribute('data-select-id');
+                            for (var i = 0; i < state.jobs.length; i++) {
+                                if (state.jobs[i].id === id) {
+                                    showSettings();
+                                    fillForm(state.jobs[i]);
+                                    break;
+                                }
+                            }
+                        });
+                    }
+                }
+
+                function renderEntries() {
+                    var table = document.getElementById('backups-table');
+                    var rows = '';
+                    for (var i = 0; i < state.entries.length; i++) {
+                        var e = state.entries[i];
+                        rows += '<div class="disk-row">' +
+                            '<div class="disk-main"><div class="disk-title">' + e.jobName + '</div><div class="disk-subtitle">' + e.path + '</div></div>' +
+                            '<div class="disk-metrics"><div>' + new Date(e.createdAt).toLocaleString() + '</div><div>' + (e.sizeBytes / 1024 / 1024).toFixed(2) + ' MB</div></div>' +
+                        '</div>';
+                    }
+                    table.innerHTML = rows || '<div class="disk-empty">No backup archives yet.</div>';
+                }
+
+                function fetchData() {
+                    return fetch('/backups/data', { credentials: 'same-origin' })
+                        .then(function (response) {
+                            if (!response.ok) throw new Error('failed to load backup data');
+                            return response.json();
+                        })
+                        .then(function (data) {
+                            state.jobs = data.jobs || [];
+                            state.entries = data.entries || [];
+                            renderJobs();
+                            renderEntries();
+                            if (data.lastError) {
+                                setStatus('Last error: ' + data.lastError, true);
+                            }
+                        })
+                        .catch(function (err) { setStatus(err.message || String(err), true); });
+                }
+
+                function saveJob() {
+                    var body = new URLSearchParams();
+                    body.set('id', document.getElementById('job-id').value.trim());
+                    body.set('name', document.getElementById('name').value.trim());
+                    body.set('enabled', document.getElementById('enabled').checked ? 'on' : '');
+                    body.set('destinationDir', document.getElementById('destinationDir').value.trim());
+                    body.set('intervalMinutes', document.getElementById('intervalMinutes').value || '60');
+                    body.set('keepCopies', document.getElementById('keepCopies').value || '10');
+                    body.set('sources', document.getElementById('sources').value || '');
+                    return fetch('/backups/config', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    }).then(function (response) {
+                        if (!response.ok) throw new Error('failed to save entry');
+                        return response.json();
+                    }).then(function (data) {
+                        if (data.job && data.job.id) {
+                            state.selectedId = data.job.id;
+                            fillForm(data.job);
+                        }
+                        setStatus('Entry saved.', false);
+                    });
+                }
+
+                function runNow() {
+                    var id = document.getElementById('job-id').value.trim();
+                    if (!id) throw new Error('select/save entry first');
+                    var body = new URLSearchParams();
+                    body.set('id', id);
+                    return fetch('/backups/run', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    }).then(function (response) {
+                        if (!response.ok) return response.text().then(function (t) { throw new Error(t || 'backup failed'); });
+                        setStatus('Backup completed.', false);
+                    });
+                }
+
+                function deleteJob() {
+                    var id = document.getElementById('job-id').value.trim();
+                    if (!id) throw new Error('select entry to delete');
+                    var body = new URLSearchParams();
+                    body.set('id', id);
+                    return fetch('/backups/delete', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    }).then(function (response) {
+                        if (!response.ok) throw new Error('failed to delete entry');
+                        clearForm();
+                        hideSettings();
+                        setStatus('Entry deleted.', false);
+                    });
+                }
+
+                document.getElementById('new-job-btn').addEventListener('click', function () {
+                    clearForm();
+                    showSettings();
+                });
+                document.getElementById('save-btn').addEventListener('click', function () {
+                    saveJob().then(fetchData).catch(function (e) { setStatus(e.message || String(e), true); });
+                });
+                document.getElementById('run-btn').addEventListener('click', function () {
+                    runNow().then(fetchData).catch(function (e) { setStatus(e.message || String(e), true); });
+                });
+                document.getElementById('delete-btn').addEventListener('click', function () {
+                    deleteJob().then(fetchData).catch(function (e) { setStatus(e.message || String(e), true); });
+                });
+
+                clearForm();
+                hideSettings();
+                fetchData();
+            })();
+        </script>
+    </main>
+</body>
+</html>
