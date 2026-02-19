@@ -7,17 +7,37 @@ import (
 	"net/netip"
 	"router/internal/clog"
 	"strings"
+	"sync"
 	"time"
 )
+
+type loginAttempt struct {
+	Count       int
+	BlockedTill time.Time
+}
+
+type authState struct {
+	sessions     map[string]time.Time
+	sessionsMu   sync.RWMutex
+	loginFails   map[string]loginAttempt
+	loginFailsMu sync.Mutex
+}
+
+func newAuthState() *authState {
+	return &authState{
+		sessions:   map[string]time.Time{},
+		loginFails: map[string]loginAttempt{},
+	}
+}
 
 func (h *Handler) isAuthenticated(r *http.Request) bool {
 	cookie, err := r.Cookie("router_session")
 	if err != nil || cookie.Value == "" {
 		return false
 	}
-	h.sessionsMu.RLock()
-	expiresAt, ok := h.sessions[cookie.Value]
-	h.sessionsMu.RUnlock()
+	h.auth.sessionsMu.RLock()
+	expiresAt, ok := h.auth.sessions[cookie.Value]
+	h.auth.sessionsMu.RUnlock()
 	if !ok || time.Now().After(expiresAt) {
 		return false
 	}
@@ -28,9 +48,9 @@ func (h *Handler) createSession() string {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	token := hex.EncodeToString(b)
-	h.sessionsMu.Lock()
-	h.sessions[token] = time.Now().Add(24 * time.Hour)
-	h.sessionsMu.Unlock()
+	h.auth.sessionsMu.Lock()
+	h.auth.sessions[token] = time.Now().Add(24 * time.Hour)
+	h.auth.sessionsMu.Unlock()
 	return token
 }
 
@@ -38,9 +58,9 @@ func (h *Handler) invalidateSession(token string) {
 	if token == "" {
 		return
 	}
-	h.sessionsMu.Lock()
-	delete(h.sessions, token)
-	h.sessionsMu.Unlock()
+	h.auth.sessionsMu.Lock()
+	delete(h.auth.sessions, token)
+	h.auth.sessionsMu.Unlock()
 }
 
 func clientIPFromRequest(r *http.Request) string {
@@ -68,25 +88,25 @@ func clientIPFromRequest(r *http.Request) string {
 }
 
 func (h *Handler) checkLoginBlocked(ip string) (time.Duration, bool) {
-	h.loginFailsMu.Lock()
-	defer h.loginFailsMu.Unlock()
-	entry, ok := h.loginFails[ip]
+	h.auth.loginFailsMu.Lock()
+	defer h.auth.loginFailsMu.Unlock()
+	entry, ok := h.auth.loginFails[ip]
 	if !ok || entry.BlockedTill.IsZero() {
 		return 0, false
 	}
 	now := time.Now()
 	if now.After(entry.BlockedTill) {
-		delete(h.loginFails, ip)
+		delete(h.auth.loginFails, ip)
 		return 0, false
 	}
 	return time.Until(entry.BlockedTill), true
 }
 
 func (h *Handler) registerLoginFailure(ip string) {
-	h.loginFailsMu.Lock()
-	defer h.loginFailsMu.Unlock()
+	h.auth.loginFailsMu.Lock()
+	defer h.auth.loginFailsMu.Unlock()
 	now := time.Now()
-	entry := h.loginFails[ip]
+	entry := h.auth.loginFails[ip]
 	if !entry.BlockedTill.IsZero() && now.After(entry.BlockedTill) {
 		entry = loginAttempt{}
 	}
@@ -96,11 +116,11 @@ func (h *Handler) registerLoginFailure(ip string) {
 		entry.Count = 0
 		clog.Warnf("Login brute force protection: ip=%s blocked for 1 hour", ip)
 	}
-	h.loginFails[ip] = entry
+	h.auth.loginFails[ip] = entry
 }
 
 func (h *Handler) clearLoginFailures(ip string) {
-	h.loginFailsMu.Lock()
-	delete(h.loginFails, ip)
-	h.loginFailsMu.Unlock()
+	h.auth.loginFailsMu.Lock()
+	delete(h.auth.loginFails, ip)
+	h.auth.loginFailsMu.Unlock()
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func TestBruteforceBlockAfterFiveFailures(t *testing.T) {
-	h := &Handler{loginFails: map[string]loginAttempt{}}
+	h := &Handler{auth: newAuthState()}
 	ip := "1.2.3.4"
 	for i := 0; i < 5; i++ {
 		h.registerLoginFailure(ip)
@@ -27,14 +27,15 @@ func TestClientIPFromRequest(t *testing.T) {
 }
 
 func TestBlockExpires(t *testing.T) {
-	h := &Handler{loginFails: map[string]loginAttempt{"1.1.1.1": {BlockedTill: time.Now().Add(-time.Minute)}}}
+	h := &Handler{auth: newAuthState()}
+	h.auth.loginFails["1.1.1.1"] = loginAttempt{BlockedTill: time.Now().Add(-time.Minute)}
 	if _, blocked := h.checkLoginBlocked("1.1.1.1"); blocked {
 		t.Fatalf("block should expire")
 	}
 }
 
 func TestSessionLifecycle(t *testing.T) {
-	h := &Handler{sessions: map[string]time.Time{}, loginFails: map[string]loginAttempt{}}
+	h := &Handler{auth: newAuthState()}
 	token := h.createSession()
 	if token == "" {
 		t.Fatalf("expected non-empty token")

@@ -51,21 +51,18 @@ type loginAttempt struct {
 
 // Handler holds all dependencies for the web panel
 type Handler struct {
-	store        *storage.RuleStore
-	adminStore   *storage.AdminStore
-	sessions     map[string]time.Time
-	sessionsMu   sync.RWMutex
-	loginFails   map[string]loginAttempt
-	loginFailsMu sync.Mutex
-	templates    map[string]*template.Template
-	stats        *stats.Stats
-	broadcaster  *logstream.Broadcaster
-	ipStore      *storage.IPReputationStore
-	backupStore  *storage.BackupStore
-	notifyStore  *storage.NotificationStore
-	gptStore     *storage.GPTStore
-	gptClient    *gpt.Client
-	notifier     *notify.TelegramNotifier
+	store       *storage.RuleStore
+	adminStore  *storage.AdminStore
+	auth        *authState
+	templates   map[string]*template.Template
+	stats       *stats.Stats
+	broadcaster *logstream.Broadcaster
+	ipStore     *storage.IPReputationStore
+	backupStore *storage.BackupStore
+	notifyStore *storage.NotificationStore
+	gptStore    *storage.GPTStore
+	gptClient   *gpt.Client
+	notifier    *notify.TelegramNotifier
 }
 
 // NewHandler creates a new panel handler
@@ -84,8 +81,7 @@ func NewHandler(store *storage.RuleStore, adminStore *storage.AdminStore, stats 
 	return &Handler{
 		store:       store,
 		adminStore:  adminStore,
-		sessions:    map[string]time.Time{},
-		loginFails:  map[string]loginAttempt{},
+		auth:        newAuthState(),
 		templates:   templates,
 		stats:       stats,
 		broadcaster: broadcaster,
