@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestClientIPPrefersForwardHeaders(t *testing.T) {
+func TestClientIPSelection(t *testing.T) {
 	tests := []struct {
 		name     string
 		headers  map[string]string
@@ -13,22 +13,22 @@ func TestClientIPPrefersForwardHeaders(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "cf connecting ip has highest priority",
+			name:     "cf connecting ip has highest priority when public",
 			headers:  map[string]string{"CF-Connecting-IP": "198.51.100.7", "X-Real-IP": "198.51.100.8"},
 			remote:   "127.0.0.1:12345",
 			expected: "198.51.100.7",
 		},
 		{
-			name:     "x real ip used when cf missing",
-			headers:  map[string]string{"X-Real-IP": "203.0.113.9"},
-			remote:   "127.0.0.1:12345",
-			expected: "203.0.113.9",
+			name:     "public xff beats localhost x-real",
+			headers:  map[string]string{"X-Real-IP": "127.0.0.1", "X-Forwarded-For": "198.51.100.11, 127.0.0.1"},
+			remote:   "185.177.72.13:23088",
+			expected: "198.51.100.11",
 		},
 		{
-			name:     "first x forwarded for ip is used",
-			headers:  map[string]string{"X-Forwarded-For": "198.51.100.11, 10.0.0.2"},
-			remote:   "127.0.0.1:12345",
-			expected: "198.51.100.11",
+			name:     "remote public beats localhost headers",
+			headers:  map[string]string{"X-Real-IP": "127.0.0.1", "X-Forwarded-For": "127.0.0.1, 127.0.0.1"},
+			remote:   "185.177.72.13:23088",
+			expected: "185.177.72.13",
 		},
 		{
 			name:     "remote addr fallback",
