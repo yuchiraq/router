@@ -698,3 +698,578 @@ func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.gptStore.Get()})
 	}).ServeHTTP(w, r)
 }
+
+// TelegramWebhook handles bot callback actions (ban buttons).
+func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.notifyStore == nil || h.notifier == nil {
+		http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	cfg := h.notifyStore.Get()
+	if cfg.WebhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != cfg.WebhookSecret {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	var update struct {
+		CallbackQuery struct {
+			Data    string `json:"data"`
+			Message struct {
+				Chat struct {
+					ID int64 `json:"id"`
+				} `json:"chat"`
+			} `json:"message"`
+		} `json:"callback_query"`
+		Message struct {
+			Text string `json:"text"`
+			Chat struct {
+				ID int64 `json:"id"`
+			} `json:"chat"`
+		} `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if update.CallbackQuery.Data == "" {
+		if strings.TrimSpace(update.Message.Text) == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if h.gptClient == nil || h.notifier == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		chatID := update.Message.Chat.ID
+		text := strings.TrimSpace(update.Message.Text)
+		if text == "/start" || text == "/help" {
+			_ = h.notifier.SendMessageToChat(chatID, "Привет! Я бот Router. Пишите сообщение, и я отвечу через GPT.\nКоманды: /help")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		reply, err := h.gptClient.Reply(chatID, text)
+		if err != nil {
+			_ = h.notifier.SendMessageToChat(chatID, "Ошибка GPT: "+err.Error())
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		_ = h.notifier.SendMessageToChat(chatID, reply)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	ip, replyText, err := h.notifier.HandleCallback(update.CallbackQuery.Data, update.CallbackQuery.Message.Chat.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if ip == "" {
+		if replyText != "" {
+			h.notifier.SendActionResult("ℹ️ " + replyText)
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if h.ipStore == nil {
+		http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	h.ipStore.Ban(ip)
+	h.notifier.SendActionResult("⛔️ Banned from Telegram action\nip: " + ip)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// NotificationsData returns telegram settings.
+func (h *Handler) NotificationsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.notifyStore == nil {
+			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg := h.notifyStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+	}).ServeHTTP(w, r)
+}
+
+// SaveNotificationsConfig updates telegram notification settings.
+func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.notifyStore == nil {
+			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		events := map[string]bool{}
+		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test"} {
+			events[k] = r.FormValue("event_"+k) == "on"
+		}
+		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))
+		quietEnd, _ := strconv.Atoi(r.FormValue("quietEnd"))
+		chatIDs := []int64{}
+		for _, part := range strings.Split(r.FormValue("chatIds"), ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			if err == nil {
+				chatIDs = append(chatIDs, id)
+			}
+		}
+		secret := strings.TrimSpace(r.FormValue("webhookSecret"))
+		if secret == "" {
+			secret = notify.GenerateWebhookSecret()
+		}
+
+		cfg := storage.NotificationConfig{
+			Enabled:         r.FormValue("enabled") == "on",
+			Token:           strings.TrimSpace(r.FormValue("token")),
+			ChatIDs:         chatIDs,
+			Events:          events,
+			QuietHoursOn:    r.FormValue("quietEnabled") == "on",
+			QuietHoursStart: quietStart,
+			QuietHoursEnd:   quietEnd,
+			WebhookSecret:   secret,
+		}
+		h.notifyStore.Update(cfg)
+
+		if cfg.Token != "" {
+			proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+			if proto == "" {
+				if r.TLS != nil {
+					proto = "https"
+				} else {
+					proto = "http"
+				}
+			}
+			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
+			if h.notifier != nil {
+				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
+					http.Error(w, "failed to set telegram webhook: "+err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get()})
+	}).ServeHTTP(w, r)
+}
+
+// TestNotification sends a test telegram message.
+func (h *Handler) TestNotification(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.notifier == nil {
+			http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		if err := h.notifier.TestMessage(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// SettingsData returns GPT settings.
+func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.gptStore == nil {
+			http.Error(w, "gpt storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg := h.gptStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+	}).ServeHTTP(w, r)
+}
+
+// SaveSettingsConfig updates GPT settings.
+func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.gptStore == nil {
+			http.Error(w, "gpt storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+
+		maxLogLines, _ := strconv.Atoi(r.FormValue("maxLogLines"))
+		onlyChatIDs := []int64{}
+		for _, part := range strings.Split(r.FormValue("onlyChatIds"), ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			if err == nil {
+				onlyChatIDs = append(onlyChatIDs, id)
+			}
+		}
+
+		cfg := storage.GPTConfig{
+			Enabled:      r.FormValue("enabled") == "on",
+			APIKey:       strings.TrimSpace(r.FormValue("apiKey")),
+			Model:        strings.TrimSpace(r.FormValue("model")),
+			SystemPrompt: r.FormValue("systemPrompt"),
+			MaxLogLines:  maxLogLines,
+			OnlyChatIDs:  onlyChatIDs,
+		}
+		h.gptStore.Update(cfg)
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.gptStore.Get()})
+	}).ServeHTTP(w, r)
+}
+
+// RemoveSuspiciousIP deletes IP from suspicious list manually from admin panel.
+func (h *Handler) RemoveSuspiciousIP(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ip := r.FormValue("ip")
+		if ip == "" {
+			http.Error(w, "ip is required", http.StatusBadRequest)
+			return
+		}
+		if h.ipStore == nil {
+			http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		if h.ipStore.IsBanned(ip) {
+			http.Error(w, "cannot remove banned ip; unban first", http.StatusBadRequest)
+			return
+		}
+		h.ipStore.Remove(ip)
+		if h.notifier != nil {
+			h.notifier.Notify("manual_remove", "manual-remove:"+ip, "🧹 Removed from suspicious list\nip: "+ip)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// BackupsData returns backup jobs and existing archives.
+func (h *Handler) BackupsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		jobs, entries, lastError := h.backupStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"jobs":      jobs,
+			"entries":   entries,
+			"lastError": lastError,
+		})
+	}).ServeHTTP(w, r)
+}
+
+// SaveBackupsConfig upserts one backup job configuration.
+func (h *Handler) SaveBackupsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+
+		sourcesRaw := r.FormValue("sources")
+		sources := []string{}
+		for _, line := range strings.Split(sourcesRaw, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				sources = append(sources, line)
+			}
+		}
+
+		interval, _ := strconv.Atoi(r.FormValue("intervalMinutes"))
+		keep, _ := strconv.Atoi(r.FormValue("keepCopies"))
+
+		job := h.backupStore.UpsertJob(storage.BackupJob{
+			ID:              strings.TrimSpace(r.FormValue("id")),
+			Name:            strings.TrimSpace(r.FormValue("name")),
+			Sources:         sources,
+			DestinationDir:  strings.TrimSpace(r.FormValue("destinationDir")),
+			IntervalMinutes: interval,
+			KeepCopies:      keep,
+			Enabled:         r.FormValue("enabled") == "on",
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"job": job})
+	}).ServeHTTP(w, r)
+}
+
+// DeleteBackupJob removes one backup job.
+func (h *Handler) DeleteBackupJob(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		id := strings.TrimSpace(r.FormValue("id"))
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		h.backupStore.DeleteJob(id)
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// RunBackupNow starts backup immediately for selected job.
+func (h *Handler) RunBackupNow(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.backupStore == nil {
+			http.Error(w, "backup storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		id := strings.TrimSpace(r.FormValue("id"))
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		if err := h.backupStore.RunJobNow(id); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// TelegramWebhook handles bot callback actions (ban buttons).
+func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.notifyStore == nil || h.notifier == nil {
+		http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	cfg := h.notifyStore.Get()
+	if cfg.WebhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != cfg.WebhookSecret {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	var update struct {
+		CallbackQuery struct {
+			Data    string `json:"data"`
+			Message struct {
+				Chat struct {
+					ID int64 `json:"id"`
+				} `json:"chat"`
+			} `json:"message"`
+		} `json:"callback_query"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if update.CallbackQuery.Data == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	ip, replyText, err := h.notifier.HandleCallback(update.CallbackQuery.Data, update.CallbackQuery.Message.Chat.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if ip == "" {
+		if replyText != "" {
+			h.notifier.SendActionResult("ℹ️ " + replyText)
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if h.ipStore == nil {
+		http.Error(w, "ip storage is disabled", http.StatusServiceUnavailable)
+		return
+	}
+	h.ipStore.Ban(ip)
+	h.notifier.SendActionResult("⛔️ Banned from Telegram action\nip: " + ip)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// NotificationsData returns telegram settings.
+func (h *Handler) NotificationsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.notifyStore == nil {
+			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg := h.notifyStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+	}).ServeHTTP(w, r)
+}
+
+// SaveNotificationsConfig updates telegram notification settings.
+func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.notifyStore == nil {
+			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		events := map[string]bool{}
+		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test"} {
+			events[k] = r.FormValue("event_"+k) == "on"
+		}
+		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))
+		quietEnd, _ := strconv.Atoi(r.FormValue("quietEnd"))
+		chatIDs := []int64{}
+		for _, part := range strings.Split(r.FormValue("chatIds"), ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			if err == nil {
+				chatIDs = append(chatIDs, id)
+			}
+		}
+		secret := strings.TrimSpace(r.FormValue("webhookSecret"))
+		if secret == "" {
+			secret = notify.GenerateWebhookSecret()
+		}
+
+		cfg := storage.NotificationConfig{
+			Enabled:         r.FormValue("enabled") == "on",
+			Token:           strings.TrimSpace(r.FormValue("token")),
+			ChatIDs:         chatIDs,
+			Events:          events,
+			QuietHoursOn:    r.FormValue("quietEnabled") == "on",
+			QuietHoursStart: quietStart,
+			QuietHoursEnd:   quietEnd,
+			WebhookSecret:   secret,
+		}
+		h.notifyStore.Update(cfg)
+
+		if cfg.Token != "" {
+			proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+			if proto == "" {
+				if r.TLS != nil {
+					proto = "https"
+				} else {
+					proto = "http"
+				}
+			}
+			webhookURL := proto + "://" + r.Host + "/telegram/webhook"
+			if h.notifier != nil {
+				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
+					http.Error(w, "failed to set telegram webhook: "+err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.notifyStore.Get()})
+	}).ServeHTTP(w, r)
+}
+
+// TestNotification sends a test telegram message.
+func (h *Handler) TestNotification(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.notifier == nil {
+			http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		if err := h.notifier.TestMessage(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}).ServeHTTP(w, r)
+}
+
+// SettingsData returns GPT settings.
+func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if h.gptStore == nil {
+			http.Error(w, "gpt storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+		cfg := h.gptStore.Get()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": cfg})
+	}).ServeHTTP(w, r)
+}
+
+// SaveSettingsConfig updates GPT settings.
+func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if h.gptStore == nil {
+			http.Error(w, "gpt storage is disabled", http.StatusServiceUnavailable)
+			return
+		}
+
+		maxLogLines, _ := strconv.Atoi(r.FormValue("maxLogLines"))
+		onlyChatIDs := []int64{}
+		for _, part := range strings.Split(r.FormValue("onlyChatIds"), ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			if err == nil {
+				onlyChatIDs = append(onlyChatIDs, id)
+			}
+		}
+
+		cfg := storage.GPTConfig{
+			Enabled:      r.FormValue("enabled") == "on",
+			APIKey:       strings.TrimSpace(r.FormValue("apiKey")),
+			Model:        strings.TrimSpace(r.FormValue("model")),
+			SystemPrompt: r.FormValue("systemPrompt"),
+			MaxLogLines:  maxLogLines,
+			OnlyChatIDs:  onlyChatIDs,
+		}
+		h.gptStore.Update(cfg)
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"config": h.gptStore.Get()})
+	}).ServeHTTP(w, r)
+}
