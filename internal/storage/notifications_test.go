@@ -13,6 +13,7 @@ func TestNotificationStorePersist(t *testing.T) {
 		Enabled:         true,
 		Token:           "token",
 		ChatIDs:         []int64{-100123, 777},
+		KnownChatIDs:    []int64{-100123, 999},
 		WebhookURL:      "https://router.example.com/telegram/webhook",
 		Events:          map[string]bool{"unknown_host": true, "test": true},
 		QuietHoursOn:    true,
@@ -37,5 +38,21 @@ func TestNotificationStorePersist(t *testing.T) {
 	}
 	if cfg.WebhookURL != "https://router.example.com/telegram/webhook" {
 		t.Fatalf("unexpected webhook url: %s", cfg.WebhookURL)
+	}
+	if len(cfg.KnownChatIDs) != 2 || cfg.KnownChatIDs[1] != 999 {
+		t.Fatalf("unexpected known chat ids: %+v", cfg.KnownChatIDs)
+	}
+}
+
+func TestNotificationStoreRememberKnownChatID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notifications.json")
+	store := NewNotificationStore(path)
+	store.RememberKnownChatID(123)
+	store.RememberKnownChatID(123)
+	store.RememberKnownChatID(456)
+	cfg := store.Get()
+	if len(cfg.KnownChatIDs) != 2 {
+		t.Fatalf("expected 2 known chat ids, got %d", len(cfg.KnownChatIDs))
 	}
 }

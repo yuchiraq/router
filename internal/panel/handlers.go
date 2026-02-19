@@ -517,6 +517,13 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+	if update.Message.Chat.ID != 0 && h.notifyStore != nil {
+		h.notifyStore.RememberKnownChatID(update.Message.Chat.ID)
+	}
+	if update.CallbackQuery.Message.Chat.ID != 0 && h.notifyStore != nil {
+		h.notifyStore.RememberKnownChatID(update.CallbackQuery.Message.Chat.ID)
+	}
+
 	if update.CallbackQuery.Data == "" {
 		if strings.TrimSpace(update.Message.Text) == "" {
 			clog.Debugf("Telegram webhook: empty text message ignored")

@@ -41,7 +41,15 @@
             </div>
         </div>
 
-                <div class="card">
+        
+        <div class="card">
+            <div class="card-header">Known Bot Chats</div>
+            <div class="card-body">
+                <p style="color:var(--text-secondary); margin-top:0;">Здесь показываются chat ID, откуда бот уже получал сообщения/webhook. Нажмите на ID, чтобы добавить его в поле Chat IDs.</p>
+                <div id="known-chat-ids" class="disk-table"></div>
+            </div>
+        </div>
+        <div class="card">
             <div class="card-header">Quiet Hours</div>
             <div class="card-body">
                 <div class="form-inline" style="margin-bottom:12px;">
@@ -135,8 +143,37 @@
                                 var key = checks[i].getAttribute('data-event');
                                 checks[i].checked = !!events[key];
                             }
+                            renderKnownChatIDs(cfg.knownChatIds || []);
                         })
                         .catch(function (e) { setStatus(e.message || String(e), true); });
+                }
+
+
+                function renderKnownChatIDs(chatIDs) {
+                    var box = document.getElementById('known-chat-ids');
+                    if (!box) return;
+                    if (!chatIDs || !chatIDs.length) {
+                        box.innerHTML = '<div class="disk-empty">Пока нет данных. Напишите боту /start и обновите страницу.</div>';
+                        return;
+                    }
+                    var html = '';
+                    for (var i = 0; i < chatIDs.length; i++) {
+                        var id = String(chatIDs[i]);
+                        html += '<button type="button" class="btn" style="margin:4px;" data-chat-id="' + id + '">' + id + '</button>';
+                    }
+                    box.innerHTML = html;
+                    var buttons = box.querySelectorAll('[data-chat-id]');
+                    for (var j = 0; j < buttons.length; j++) {
+                        buttons[j].addEventListener('click', function () {
+                            var id = this.getAttribute('data-chat-id');
+                            var input = document.getElementById('chatIds');
+                            var current = input.value.trim();
+                            var parts = current ? current.split(',').map(function(x){ return x.trim(); }).filter(Boolean) : [];
+                            if (parts.indexOf(id) === -1) parts.push(id);
+                            input.value = parts.join(',');
+                            setStatus('Chat ID ' + id + ' добавлен в поле Chat IDs (не забудьте сохранить).', false);
+                        });
+                    }
                 }
 
                 function saveConfig() {

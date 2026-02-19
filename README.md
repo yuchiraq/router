@@ -294,6 +294,7 @@ go run main.go
 
 - `Token` — токен Telegram-бота;
 - `Chat IDs` — список чатов для уведомлений (через запятую);
+- `Known Bot Chats` в панели показывает chat ID, откуда бот уже писал в webhook; клик по ID подставляет его в поле `Chat IDs`.
 - `Webhook Secret` — секрет для проверки заголовка webhook;
 - `Webhook URL` — публичный HTTPS URL для webhook (опционально, рекомендуется для локальной панели/прокси).
 - отдельный allowlist user id не нужен: доверие определяется списком `Chat IDs`;
