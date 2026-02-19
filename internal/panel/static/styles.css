@@ -56,7 +56,7 @@ body {
     background-color: var(--bg-color);
     background-image: var(--bg-glow), var(--glow-accent);
     background-repeat: no-repeat, no-repeat;
-    background-size: 1800px 1200px, 1800px 1200px;
+    background-size: max(100vw, 1800px) 1200px, max(100vw, 1800px) 1200px;
     background-attachment: fixed, fixed;
     color: var(--text-primary);
     padding-top: 60px;
