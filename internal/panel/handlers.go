@@ -1,18 +1,13 @@
 package panel
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"html/template"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"router/internal/clog"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"router/internal/gpt"
 	"router/internal/logstream"
@@ -42,11 +37,6 @@ var upgrader = websocket.Upgrader{
 
 		return strings.EqualFold(originURL.Host, host)
 	},
-}
-
-type loginAttempt struct {
-	Count       int
-	BlockedTill time.Time
 }
 
 // Handler holds all dependencies for the web panel
@@ -107,9 +97,6 @@ func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}
-	h.sessionsMu.Lock()
-	delete(h.sessions, token)
-	h.sessionsMu.Unlock()
 }
 
 // render executes the correct template, ensuring page data is passed
@@ -829,101 +816,5 @@ func (h *Handler) SaveAccountConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]interface{}{"username": h.adminStore.Username()})
-	}).ServeHTTP(w, r)
-}
-
-// Login serves and handles login form.
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		if h.isAuthenticated(r) {
-			http.Redirect(w, r, "/", http.StatusFound)
-			return
-		}
-		http.ServeFile(w, r, "internal/panel/static/login.html")
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if h.adminStore == nil {
-		http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
-		return
-	}
-	clientIP := clientIPFromRequest(r)
-	if retryAfter, blocked := h.checkLoginBlocked(clientIP); blocked {
-		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
-		http.Error(w, "Too many failed login attempts. Try later.", http.StatusTooManyRequests)
-		return
-	}
-	username := strings.TrimSpace(r.FormValue("username"))
-	password := r.FormValue("password")
-	if !h.adminStore.Verify(username, password) {
-		h.registerLoginFailure(clientIP)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	h.clearLoginFailures(clientIP)
-	token := h.createSession()
-	http.SetCookie(w, &http.Cookie{Name: "router_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// Logout deletes active session.
-func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		cookie, _ := r.Cookie("router_session")
-		if cookie != nil {
-			h.invalidateSession(cookie.Value)
-		}
-		http.SetCookie(w, &http.Cookie{Name: "router_session", Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
-		w.WriteHeader(http.StatusNoContent)
-	}).ServeHTTP(w, r)
-}
-
-// Account serves account settings page.
-func (h *Handler) Account(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "internal/panel/static/account.html")
-	}).ServeHTTP(w, r)
-}
-
-// AccountData returns current account settings.
-func (h *Handler) AccountData(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		if h.adminStore == nil {
-			http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"username": h.adminStore.Username()})
-	}).ServeHTTP(w, r)
-}
-
-// SaveAccountConfig updates username/password.
-func (h *Handler) SaveAccountConfig(w http.ResponseWriter, r *http.Request) {
-	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if h.adminStore == nil {
-			http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
-			return
-		}
-		username := strings.TrimSpace(r.FormValue("username"))
-		password := strings.TrimSpace(r.FormValue("password"))
-		if username == "" || len(password) < 6 {
-			http.Error(w, "username is required and password must be at least 6 chars", http.StatusBadRequest)
-			return
-		}
-		if !h.adminStore.Update(username, password) {
-			http.Error(w, "failed to update account", http.StatusInternalServerError)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"username": h.adminStore.Username()})
 	}).ServeHTTP(w, r)
 }
