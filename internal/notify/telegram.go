@@ -159,21 +159,16 @@ func (n *TelegramNotifier) SendMessageToChat(chatID int64, text string) error {
 }
 
 func (n *TelegramNotifier) callBot(token, method string, values url.Values) error {
-	chatID := values.Get("chat_id")
-	clog.Infof("[telegram] call method=%s chat_id=%s", method, chatID)
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
 	resp, err := n.client.PostForm(apiURL, values)
 	if err != nil {
-		clog.Warnf("[telegram] request failed method=%s chat_id=%s err=%v", method, chatID, err)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		clog.Warnf("[telegram] bad response method=%s chat_id=%s status=%s", method, chatID, resp.Status)
 		return fmt.Errorf("bad status: %s body=%s", resp.Status, string(bytes.TrimSpace(b)))
 	}
-	clog.Infof("[telegram] call success method=%s chat_id=%s", method, chatID)
 	return nil
 }
 
