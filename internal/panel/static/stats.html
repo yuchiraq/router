@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/chart.js"></script>
     <script src="/static/color-hash.js"></script>
+    <style>
+        .btn-icon { padding: 6px 10px; min-width: auto; line-height: 1; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); }
+        .btn-icon:hover { color: var(--accent-red); border-color: var(--accent-red); background: transparent; transform: none; }
+    </style>
 </head>
 <body>
     <nav class="nav">
@@ -15,6 +19,9 @@
             <div class="nav-links">
                 <a href="/">Home</a>
                 <a href="/stats" class="active">Stats</a>
+                <a href="/backups">Backups</a>
+                <a href="/notifications">Notifications</a>
+                <a href="/settings">GPT Settings</a>
             </div>
         </div>
     </nav>
@@ -72,6 +79,10 @@
         <div class="card">
             <div class="card-header">Suspicious IPs</div>
             <div class="card-body">
+                <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
+                    <input type="text" id="manual-ban-ip" class="form-control" placeholder="Enter IP to ban (e.g. 203.0.113.10)" style="max-width:360px;">
+                    <button class="btn btn-danger" id="manual-ban-btn" type="button">Ban IP</button>
+                </div>
                 <div class="disk-table" id="suspicious-table"></div>
             </div>
         </div>
@@ -263,6 +274,32 @@
                     });
                 }
 
+                function unbanIP(ip) {
+                    return fetch('/stats/unban', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'ip=' + encodeURIComponent(ip)
+                    }).then(function(response) {
+                        if (!response.ok) {
+                            throw new Error('failed to unban ip ' + ip);
+                        }
+                    });
+                }
+
+                function removeIP(ip) {
+                    return fetch('/stats/remove', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'ip=' + encodeURIComponent(ip)
+                    }).then(function(response) {
+                        if (!response.ok) {
+                            throw new Error('failed to remove ip ' + ip);
+                        }
+                    });
+                }
+
                 function fetchData() {
                     fetch('/stats/data', { credentials: 'same-origin' })
                         .then(function(response) {
@@ -393,8 +430,11 @@
                                 for (var xi = 0; xi < data.suspicious.length; xi++) {
                                     var item = data.suspicious[xi];
                                     var action = item.banned
-                                        ? '<span class="country-count">banned</span>'
+                                        ? '<button class="btn" data-unban-ip="' + item.ip + '">Unban</button>'
                                         : '<button class="btn btn-danger" data-ban-ip="' + item.ip + '">Ban</button>';
+                                    if (!item.banned) {
+                                        action += ' <button class="btn btn-icon" title="Remove from list" aria-label="Remove from list" data-remove-ip="' + item.ip + '">✕</button>';
+                                    }
                                     suspiciousRows += '<div class="disk-row">' +
                                         '<div class="disk-main">' +
                                             '<div class="disk-title">' + item.ip + '</div>' +
@@ -409,11 +449,31 @@
                                 }
                                 suspiciousTable.innerHTML = suspiciousRows || '<div class="disk-empty">No suspicious IPs.</div>';
 
-                                var buttons = suspiciousTable.querySelectorAll('[data-ban-ip]');
-                                for (var bi = 0; bi < buttons.length; bi++) {
-                                    buttons[bi].addEventListener('click', function(ev) {
+                                var banButtons = suspiciousTable.querySelectorAll('[data-ban-ip]');
+                                for (var bi = 0; bi < banButtons.length; bi++) {
+                                    banButtons[bi].addEventListener('click', function(ev) {
                                         var ip = ev.currentTarget.getAttribute('data-ban-ip');
                                         banIP(ip)
+                                            .then(fetchData)
+                                            .catch(function(error) { console.error(error); });
+                                    });
+                                }
+
+                                var unbanButtons = suspiciousTable.querySelectorAll('[data-unban-ip]');
+                                for (var ui = 0; ui < unbanButtons.length; ui++) {
+                                    unbanButtons[ui].addEventListener('click', function(ev) {
+                                        var ip = ev.currentTarget.getAttribute('data-unban-ip');
+                                        unbanIP(ip)
+                                            .then(fetchData)
+                                            .catch(function(error) { console.error(error); });
+                                    });
+                                }
+
+                                var removeButtons = suspiciousTable.querySelectorAll('[data-remove-ip]');
+                                for (var ri = 0; ri < removeButtons.length; ri++) {
+                                    removeButtons[ri].addEventListener('click', function(ev) {
+                                        var ip = ev.currentTarget.getAttribute('data-remove-ip');
+                                        removeIP(ip)
                                             .then(fetchData)
                                             .catch(function(error) { console.error(error); });
                                     });
@@ -423,6 +483,23 @@
                         .catch(function(error) {
                             console.error('Error fetching stats data:', error);
                         });
+                }
+
+                var manualBanBtn = document.getElementById('manual-ban-btn');
+                var manualBanInput = document.getElementById('manual-ban-ip');
+                if (manualBanBtn && manualBanInput) {
+                    manualBanBtn.addEventListener('click', function() {
+                        var ip = manualBanInput.value.trim();
+                        if (!ip) {
+                            return;
+                        }
+                        banIP(ip)
+                            .then(function() {
+                                manualBanInput.value = '';
+                                return fetchData();
+                            })
+                            .catch(function(error) { console.error(error); });
+                    });
                 }
 
                 setInterval(fetchData, 3000);
