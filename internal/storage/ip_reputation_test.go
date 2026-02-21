@@ -92,9 +92,10 @@ func TestIPReputationStoreAutoBanAndExpire(t *testing.T) {
 	store := NewIPReputationStore(path)
 	store.nowFn = func() time.Time { return now }
 
-	var autoBanned bool
+	autoBanned := false
 	for i := 0; i < 10; i++ {
-		autoBanned, _ = store.MarkSuspicious("10.20.30.40", "suspicious path probe")
+		triggered, _ := store.MarkSuspicious("10.20.30.40", "suspicious path probe")
+		autoBanned = autoBanned || triggered
 	}
 	if !autoBanned {
 		t.Fatalf("expected auto-ban on rapid suspicious hits")

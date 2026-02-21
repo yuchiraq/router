@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
 
 const (
-	autoBanWindow   = 2 * time.Minute
-	autoBanHits     = 10
-	autoBanDuration = 24 * time.Hour
+	defaultAutoBanWindow = 1 * time.Minute
+	defaultAutoBanHits   = 5
+	autoBanDuration      = 24 * time.Hour
 )
 
 // SuspiciousIP describes an IP with suspicious activity metadata.
@@ -35,14 +36,22 @@ type ipReputationData struct {
 
 // IPReputationStore stores suspicious and banned IPs in a JSON file.
 type IPReputationStore struct {
-	mu      sync.RWMutex
-	path    string
-	entries map[string]*SuspiciousIP
-	nowFn   func() time.Time
+	mu            sync.RWMutex
+	path          string
+	entries       map[string]*SuspiciousIP
+	nowFn         func() time.Time
+	autoBanWindow time.Duration
+	autoBanHits   int
 }
 
 func NewIPReputationStore(path string) *IPReputationStore {
-	s := &IPReputationStore{path: path, entries: make(map[string]*SuspiciousIP), nowFn: time.Now}
+	s := &IPReputationStore{
+		path:          path,
+		entries:       make(map[string]*SuspiciousIP),
+		nowFn:         time.Now,
+		autoBanWindow: envDurationSeconds("IP_AUTO_BAN_WINDOW_SEC", defaultAutoBanWindow),
+		autoBanHits:   envInt("IP_AUTO_BAN_HITS", defaultAutoBanHits),
+	}
 	s.load()
 	return s
 }
@@ -106,14 +115,14 @@ func (s *IPReputationStore) MarkSuspicious(ip, reason string) (bool, time.Time) 
 		entry.Reason = reason
 	}
 
-	if entry.WindowStart.IsZero() || now.Sub(entry.WindowStart) > autoBanWindow {
+	if entry.WindowStart.IsZero() || now.Sub(entry.WindowStart) > s.autoBanWindow {
 		entry.WindowStart = now
 		entry.WindowCount = 1
 	} else {
 		entry.WindowCount++
 	}
 
-	if !entry.Banned && entry.WindowCount >= autoBanHits {
+	if !entry.Banned && entry.WindowCount >= s.autoBanHits {
 		entry.Banned = true
 		entry.AutoBanned = true
 		entry.BannedAt = now
@@ -234,4 +243,28 @@ func (s *IPReputationStore) AutoBannedList() []SuspiciousIP {
 		}
 	}
 	return out
+}
+
+func envInt(key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return v
+}
+
+func envDurationSeconds(key string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return time.Duration(v) * time.Second
 }
