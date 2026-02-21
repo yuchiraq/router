@@ -3,6 +3,7 @@ package storage
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestIPReputationStoreMarkAndBan(t *testing.T) {
@@ -80,5 +81,33 @@ func TestIPReputationStoreRemove(t *testing.T) {
 	reloaded := NewIPReputationStore(path)
 	if len(reloaded.List()) != 0 {
 		t.Fatalf("expected remove to persist")
+	}
+}
+
+func TestIPReputationStoreAutoBanAndExpire(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ip_reputation.json")
+
+	now := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	store := NewIPReputationStore(path)
+	store.nowFn = func() time.Time { return now }
+
+	var autoBanned bool
+	for i := 0; i < 10; i++ {
+		autoBanned, _ = store.MarkSuspicious("10.20.30.40", "suspicious path probe")
+	}
+	if !autoBanned {
+		t.Fatalf("expected auto-ban on rapid suspicious hits")
+	}
+	if !store.IsBanned("10.20.30.40") {
+		t.Fatalf("expected ip to be banned")
+	}
+	if len(store.AutoBannedList()) != 1 {
+		t.Fatalf("expected one auto-banned ip")
+	}
+
+	now = now.Add(25 * time.Hour)
+	if store.IsBanned("10.20.30.40") {
+		t.Fatalf("expected auto-ban to expire after 24h")
 	}
 }

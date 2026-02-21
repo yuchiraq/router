@@ -231,8 +231,10 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		h.stats.RecordDisks()
 		h.stats.RecordSSHConnections()
 		suspicious := []storage.SuspiciousIP{}
+		autoBanned := []storage.SuspiciousIP{}
 		if h.ipStore != nil {
 			suspicious = h.ipStore.List()
+			autoBanned = h.ipStore.AutoBannedList()
 		}
 		requestData := h.stats.GetRequestData()
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
@@ -256,6 +258,7 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 			"countries":  countryData,
 			"ssh":        sshData,
 			"suspicious": suspicious,
+			"autoBanned": autoBanned,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -589,7 +592,7 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			return
 		}
 		events := map[string]bool{}
-		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test"} {
+		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "auto_ban", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test"} {
 			events[k] = r.FormValue("event_"+k) == "on"
 		}
 		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))
