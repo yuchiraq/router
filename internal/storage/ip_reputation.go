@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	defaultAutoBanWindow = 1 * time.Minute
-	defaultAutoBanHits   = 5
+	defaultAutoBanWindow = 2 * time.Minute
+	defaultAutoBanHits   = 3
 	autoBanDuration      = 24 * time.Hour
 )
 
