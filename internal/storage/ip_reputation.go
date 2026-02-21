@@ -8,15 +8,25 @@ import (
 	"time"
 )
 
+const (
+	autoBanWindow   = 2 * time.Minute
+	autoBanHits     = 10
+	autoBanDuration = 24 * time.Hour
+)
+
 // SuspiciousIP describes an IP with suspicious activity metadata.
 type SuspiciousIP struct {
-	IP        string    `json:"ip"`
-	Reason    string    `json:"reason"`
-	Count     int       `json:"count"`
-	FirstSeen time.Time `json:"firstSeen"`
-	LastSeen  time.Time `json:"lastSeen"`
-	Banned    bool      `json:"banned"`
-	BannedAt  time.Time `json:"bannedAt,omitempty"`
+	IP          string    `json:"ip"`
+	Reason      string    `json:"reason"`
+	Count       int       `json:"count"`
+	FirstSeen   time.Time `json:"firstSeen"`
+	LastSeen    time.Time `json:"lastSeen"`
+	Banned      bool      `json:"banned"`
+	BannedAt    time.Time `json:"bannedAt,omitempty"`
+	BanUntil    time.Time `json:"banUntil,omitempty"`
+	AutoBanned  bool      `json:"autoBanned,omitempty"`
+	WindowStart time.Time `json:"windowStart,omitempty"`
+	WindowCount int       `json:"windowCount,omitempty"`
 }
 
 type ipReputationData struct {
@@ -28,10 +38,11 @@ type IPReputationStore struct {
 	mu      sync.RWMutex
 	path    string
 	entries map[string]*SuspiciousIP
+	nowFn   func() time.Time
 }
 
 func NewIPReputationStore(path string) *IPReputationStore {
-	s := &IPReputationStore{path: path, entries: make(map[string]*SuspiciousIP)}
+	s := &IPReputationStore{path: path, entries: make(map[string]*SuspiciousIP), nowFn: time.Now}
 	s.load()
 	return s
 }
@@ -64,26 +75,29 @@ func (s *IPReputationStore) saveLocked() {
 	_ = os.WriteFile(s.path, data, 0644)
 }
 
-func (s *IPReputationStore) MarkSuspicious(ip, reason string) {
+func (s *IPReputationStore) MarkSuspicious(ip, reason string) (bool, time.Time) {
 	if ip == "" {
-		return
+		return false, time.Time{}
 	}
-	now := time.Now()
+	now := s.nowFn()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	entry, ok := s.entries[ip]
 	if !ok {
-		s.entries[ip] = &SuspiciousIP{
-			IP:        ip,
-			Reason:    reason,
-			Count:     1,
-			FirstSeen: now,
-			LastSeen:  now,
+		entry = &SuspiciousIP{
+			IP:          ip,
+			Reason:      reason,
+			Count:       1,
+			FirstSeen:   now,
+			LastSeen:    now,
+			WindowStart: now,
+			WindowCount: 1,
 		}
+		s.entries[ip] = entry
 		s.saveLocked()
-		return
+		return false, time.Time{}
 	}
 
 	entry.Count++
@@ -91,14 +105,32 @@ func (s *IPReputationStore) MarkSuspicious(ip, reason string) {
 	if reason != "" {
 		entry.Reason = reason
 	}
+
+	if entry.WindowStart.IsZero() || now.Sub(entry.WindowStart) > autoBanWindow {
+		entry.WindowStart = now
+		entry.WindowCount = 1
+	} else {
+		entry.WindowCount++
+	}
+
+	if !entry.Banned && entry.WindowCount >= autoBanHits {
+		entry.Banned = true
+		entry.AutoBanned = true
+		entry.BannedAt = now
+		entry.BanUntil = now.Add(autoBanDuration)
+		s.saveLocked()
+		return true, entry.BanUntil
+	}
+
 	s.saveLocked()
+	return false, time.Time{}
 }
 
 func (s *IPReputationStore) Ban(ip string) bool {
 	if ip == "" {
 		return false
 	}
-	now := time.Now()
+	now := s.nowFn()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -112,6 +144,8 @@ func (s *IPReputationStore) Ban(ip string) bool {
 		return false
 	}
 	entry.Banned = true
+	entry.AutoBanned = false
+	entry.BanUntil = time.Time{}
 	entry.BannedAt = now
 	s.saveLocked()
 	return true
@@ -131,7 +165,9 @@ func (s *IPReputationStore) Unban(ip string) bool {
 	}
 
 	entry.Banned = false
+	entry.AutoBanned = false
 	entry.BannedAt = time.Time{}
+	entry.BanUntil = time.Time{}
 	s.saveLocked()
 	return true
 }
@@ -154,11 +190,18 @@ func (s *IPReputationStore) Remove(ip string) bool {
 }
 
 func (s *IPReputationStore) IsBanned(ip string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	entry, ok := s.entries[ip]
 	if !ok {
 		return false
+	}
+	if entry.Banned && !entry.BanUntil.IsZero() && s.nowFn().After(entry.BanUntil) {
+		entry.Banned = false
+		entry.AutoBanned = false
+		entry.BannedAt = time.Time{}
+		entry.BanUntil = time.Time{}
+		s.saveLocked()
 	}
 	return entry.Banned
 }
@@ -179,5 +222,16 @@ func (s *IPReputationStore) List() []SuspiciousIP {
 		}
 		return out[i].Count > out[j].Count
 	})
+	return out
+}
+
+func (s *IPReputationStore) AutoBannedList() []SuspiciousIP {
+	items := s.List()
+	out := make([]SuspiciousIP, 0)
+	for _, item := range items {
+		if item.Banned && item.AutoBanned {
+			out = append(out, item)
+		}
+	}
 	return out
 }

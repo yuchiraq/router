@@ -12,6 +12,7 @@ import (
 	"router/internal/stats"
 	"router/internal/storage"
 	"strings"
+	"time"
 )
 
 // Proxy is a reverse proxy that uses a RuleStore to determine the target.
@@ -63,7 +64,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		clog.Warnf("[no-rule] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, r.RemoteAddr)
 		if p.reputation != nil {
-			p.reputation.MarkSuspicious(remoteIP, "unknown host")
+			autoBanned, banUntil := p.reputation.MarkSuspicious(remoteIP, "unknown host")
+			if autoBanned && p.notifier != nil {
+				p.notifier.Notify("auto_ban", "auto-ban:"+remoteIP, "🤖 Auto-ban activated\nip: "+remoteIP+"\nreason: too many suspicious requests\nuntil: "+banUntil.Format(time.RFC3339))
+			}
 		}
 		if p.notifier != nil {
 			p.notifier.NotifyWithBanButton("unknown_host", "unknown-host:"+remoteIP+":"+r.Host, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "unknown host"), remoteIP)
@@ -73,7 +77,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.reputation != nil && suspiciousPath(r.URL.Path) {
-		p.reputation.MarkSuspicious(remoteIP, "suspicious path probe")
+		autoBanned, banUntil := p.reputation.MarkSuspicious(remoteIP, "suspicious path probe")
+		if autoBanned && p.notifier != nil {
+			p.notifier.Notify("auto_ban", "auto-ban:"+remoteIP, "🤖 Auto-ban activated\nip: "+remoteIP+"\nreason: too many suspicious requests\nuntil: "+banUntil.Format(time.RFC3339))
+		}
 		if p.notifier != nil {
 			p.notifier.NotifyWithBanButton("suspicious_probe", "probe:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "suspicious path probe"), remoteIP)
 		}

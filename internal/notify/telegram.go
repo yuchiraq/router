@@ -44,7 +44,8 @@ func (n *TelegramNotifier) NotifyWithBanButton(eventKey, dedupeKey, message, ip 
 
 func (n *TelegramNotifier) notifyInternal(eventKey, dedupeKey, message, banIP string) {
 	cfg := n.store.Get()
-	if !cfg.Enabled || cfg.Token == "" || len(cfg.ChatIDs) == 0 {
+	chatIDs := targetChatIDs(cfg)
+	if !cfg.Enabled || cfg.Token == "" || len(chatIDs) == 0 {
 		return
 	}
 	if !cfg.Events[eventKey] {
@@ -57,7 +58,7 @@ func (n *TelegramNotifier) notifyInternal(eventKey, dedupeKey, message, banIP st
 		return
 	}
 
-	for _, chatID := range cfg.ChatIDs {
+	for _, chatID := range chatIDs {
 		values := url.Values{}
 		values.Set("chat_id", fmt.Sprintf("%d", chatID))
 		values.Set("text", message)
@@ -78,10 +79,18 @@ func (n *TelegramNotifier) notifyInternal(eventKey, dedupeKey, message, banIP st
 
 func (n *TelegramNotifier) TestMessage() error {
 	cfg := n.store.Get()
-	if cfg.Token == "" || len(cfg.ChatIDs) == 0 {
+	chatIDs := targetChatIDs(cfg)
+	if cfg.Token == "" || len(chatIDs) == 0 {
 		return fmt.Errorf("token and chat ids are required")
 	}
-	n.Notify("test", "manual-test-"+time.Now().Format(time.RFC3339Nano), "✅ Router test notification")
+	for _, chatID := range chatIDs {
+		values := url.Values{}
+		values.Set("chat_id", fmt.Sprintf("%d", chatID))
+		values.Set("text", "✅ Router test notification")
+		if err := n.callBot(cfg.Token, "sendMessage", values); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -141,10 +150,11 @@ func (n *TelegramNotifier) HandleCallback(data string, fromChatID int64) (string
 
 func (n *TelegramNotifier) SendActionResult(text string) {
 	cfg := n.store.Get()
-	if cfg.Token == "" || len(cfg.ChatIDs) == 0 {
+	chatIDs := targetChatIDs(cfg)
+	if cfg.Token == "" || len(chatIDs) == 0 {
 		return
 	}
-	for _, chatID := range cfg.ChatIDs {
+	for _, chatID := range chatIDs {
 		values := url.Values{}
 		values.Set("chat_id", fmt.Sprintf("%d", chatID))
 		values.Set("text", text)
@@ -199,6 +209,13 @@ func (n *TelegramNotifier) shouldSkip(key string) bool {
 		}
 	}
 	return false
+}
+
+func targetChatIDs(cfg storage.NotificationConfig) []int64 {
+	if len(cfg.ChatIDs) > 0 {
+		return cfg.ChatIDs
+	}
+	return cfg.KnownChatIDs
 }
 
 func BuildProxyAlert(method, path, host, ip, reason string) string {
