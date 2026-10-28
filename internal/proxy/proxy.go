@@ -40,6 +40,9 @@ func NewProxy(store *storage.RuleStore, stats *stats.Stats, reputation *storage.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	socketIP := remoteAddrIP(r.RemoteAddr)
 	remoteIP := clientIP(r)
+	if workServiceHost(r.Host) {
+		remoteIP = socketIP
+	}
 	if p.reputation != nil && p.reputation.IsBanned(remoteIP) {
 		clog.Warnf("[blocked-ip] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, remoteIP)
 		if p.notifier != nil {
@@ -110,16 +113,40 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
 	// Update the request headers
+	incomingHost := r.Host
 	r.URL.Host = targetURL.Host
 	r.URL.Scheme = targetURL.Scheme
 	r.Header.Set("X-Real-IP", remoteIP)
 	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
 	r.Header.Set("X-Forwarded-For", appendForwardedFor(r.Header.Get("X-Forwarded-For"), socketIP))
 	r.Host = targetURL.Host
+	setWorkServiceHeaders(r, incomingHost, socketIP)
 
 	clog.Infof("[proxy-forward] %s %s src=%s remote=%s xff=%q host=%s -> %s", r.Method, r.URL.Path, remoteIP, r.RemoteAddr, r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Forwarded-Host"), targetURL.Host)
 
 	proxy.ServeHTTP(w, r)
+}
+
+func workServiceHost(host string) bool {
+	return strings.EqualFold(host, "appworks.avayusstroi.by") || strings.EqualFold(host, "appworks.avayusstroi.by:443")
+}
+
+// WorkService trusts forwarding metadata only from this TLS-terminating proxy.
+// Preserve the behavior of unrelated routes until they are migrated separately.
+func setWorkServiceHeaders(r *http.Request, incomingHost, socketIP string) {
+	if !workServiceHost(incomingHost) {
+		return
+	}
+	r.Host = "appworks.avayusstroi.by"
+	r.Header.Set("X-Forwarded-Host", r.Host)
+	r.Header.Set("X-Forwarded-Proto", "http")
+	if r.TLS != nil {
+		r.Header.Set("X-Forwarded-Proto", "https")
+	}
+	r.Header.Set("X-Forwarded-For", socketIP)
+	r.Header.Set("X-Real-IP", socketIP)
+	r.Header.Del("Forwarded")
+	r.Header.Del("CF-Connecting-IP")
 }
 
 func serveMaintenanceStatic(w http.ResponseWriter, r *http.Request) bool {
