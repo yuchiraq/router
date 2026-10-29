@@ -1,7 +1,6 @@
 package notify
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -180,13 +179,19 @@ func (n *TelegramNotifier) callBot(token, method string, values url.Values) erro
 	clog.Debugf("telegram callBot: method=%s", method)
 	resp, err := n.client.PostForm(apiURL, values)
 	if err != nil {
-		clog.Errorf("telegram callBot: method=%s network error: %v", method, err)
-		return err
+		// url.Error includes the bot token in its URL. Never return or log it.
+		return fmt.Errorf("telegram %s: network request failed", method)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("bad status: %s body=%s", resp.Status, string(bytes.TrimSpace(b)))
+	var result struct {
+		OK        bool `json:"ok"`
+		ErrorCode int  `json:"error_code"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
+		return fmt.Errorf("telegram %s: invalid response (HTTP %d)", method, resp.StatusCode)
+	}
+	if resp.StatusCode >= 300 || !result.OK {
+		return fmt.Errorf("telegram %s: HTTP %d, API error %d", method, resp.StatusCode, result.ErrorCode)
 	}
 	clog.Infof("telegram callBot: method=%s status=%s", method, resp.Status)
 	return nil

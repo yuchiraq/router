@@ -226,10 +226,7 @@ func (h *Handler) RuleMaintenance(w http.ResponseWriter, r *http.Request) {
 // StatsData provides stats data as JSON
 func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
-		h.stats.RecordMemory()
-		h.stats.RecordCPU()
-		h.stats.RecordDisks()
-		h.stats.RecordSSHConnections()
+		// Sampling belongs to the background collector, not every browser poll.
 		suspicious := []storage.SuspiciousIP{}
 		autoBanned := []storage.SuspiciousIP{}
 		if h.ipStore != nil {
@@ -240,6 +237,11 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
 		cpuLabels, cpuPercents := h.stats.GetCPUData()
 		diskData := h.stats.GetDiskData()
+		warning, critical := 85, 95
+		if h.notifyStore != nil {
+			cfg := h.notifyStore.Get()
+			warning, critical = cfg.DiskWarning, cfg.DiskCritical
+		}
 		countryData := h.stats.GetCountryData()
 		sshData := h.stats.GetSSHData()
 
@@ -254,11 +256,14 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 				"labels":   cpuLabels,
 				"percents": cpuPercents,
 			},
-			"disks":      diskData,
-			"countries":  countryData,
-			"ssh":        sshData,
-			"suspicious": suspicious,
-			"autoBanned": autoBanned,
+			"disks":           diskData,
+			"diskUnavailable": h.stats.UnavailableDisks(),
+			"diskWarning":     warning,
+			"diskCritical":    critical,
+			"countries":       countryData,
+			"ssh":             sshData,
+			"suspicious":      suspicious,
+			"autoBanned":      autoBanned,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -587,15 +592,45 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Invalid form", http.StatusBadRequest)
+			return
+		}
 		if h.notifyStore == nil {
 			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
 			return
 		}
 		events := map[string]bool{}
-		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "auto_ban", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test"} {
+		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "auto_ban", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test", "disk_usage"} {
 			events[k] = r.FormValue("event_"+k) == "on"
 		}
 		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))
+		previous := h.notifyStore.Get()
+		paths := previous.DiskPaths
+		if r.PostForm.Has("diskPaths") {
+			var err error
+			paths, err = storage.ParseDiskPaths(r.FormValue("diskPaths"))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		warning, critical, reminder := previous.DiskWarning, previous.DiskCritical, previous.DiskReminderHours
+		for key, dst := range map[string]*int{"diskWarning": &warning, "diskCritical": &critical, "diskReminderHours": &reminder} {
+			if value := r.FormValue(key); value != "" {
+				parsed, err := strconv.Atoi(value)
+				if err != nil {
+					http.Error(w, "Пороги дисков должны быть целыми числами", http.StatusBadRequest)
+					return
+				}
+				*dst = parsed
+			}
+		}
+		if warning < 50 || warning > 98 || critical <= warning || critical > 100 || reminder < 1 || reminder > 168 {
+			http.Error(w, "Проверьте пороги: предупреждение 50–98%, критический выше предупреждения и до 100%, повтор 1–168 часов", http.StatusBadRequest)
+			return
+		}
 		quietEnd, _ := strconv.Atoi(r.FormValue("quietEnd"))
 		chatIDs := []int64{}
 		for _, part := range strings.Split(r.FormValue("chatIds"), ",") {
@@ -614,19 +649,27 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 		}
 
 		cfg := storage.NotificationConfig{
-			Enabled:         r.FormValue("enabled") == "on",
-			Token:           strings.TrimSpace(r.FormValue("token")),
-			ChatIDs:         chatIDs,
-			Events:          events,
-			QuietHoursOn:    r.FormValue("quietEnabled") == "on",
-			QuietHoursStart: quietStart,
-			QuietHoursEnd:   quietEnd,
-			WebhookSecret:   secret,
-			WebhookURL:      strings.TrimSpace(r.FormValue("webhookUrl")),
+			Enabled:           r.FormValue("enabled") == "on",
+			Token:             strings.TrimSpace(r.FormValue("token")),
+			ChatIDs:           chatIDs,
+			KnownChatIDs:      previous.KnownChatIDs,
+			DiskWarning:       warning,
+			DiskCritical:      critical,
+			DiskReminderHours: reminder,
+			DiskPaths:         paths,
+			Events:            events,
+			QuietHoursOn:      r.FormValue("quietEnabled") == "on",
+			QuietHoursStart:   quietStart,
+			QuietHoursEnd:     quietEnd,
+			WebhookSecret:     secret,
+			WebhookURL:        strings.TrimSpace(r.FormValue("webhookUrl")),
 		}
-		h.notifyStore.Update(cfg)
+		if err := h.notifyStore.Update(cfg); err != nil {
+			http.Error(w, "Не удалось сохранить настройки на диск. Изменения не применены.", http.StatusInternalServerError)
+			return
+		}
 
-		warning := ""
+		webhookWarning := ""
 		if cfg.Token != "" {
 			proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
 			if proto == "" {
@@ -641,20 +684,20 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 				webhookURL = proto + "://" + r.Host + "/telegram/webhook"
 			}
 			if !strings.HasPrefix(strings.ToLower(webhookURL), "https://") {
-				warning = "Webhook not configured automatically: Telegram requires a public HTTPS URL. Set Webhook URL to https://... and save again."
+				webhookWarning = "Настройки сохранены. Входящие команды бота недоступны без публичного HTTPS-адреса webhook. Исходящие уведомления работают без него."
 				clog.Warnf("Notifications config: skip setWebhook because URL is not HTTPS: %s", webhookURL)
 			} else if h.notifier != nil {
 				clog.Infof("Notifications config: setting telegram webhook url=%s", webhookURL)
 				if err := h.notifier.EnsureWebhook(cfg, webhookURL); err != nil {
 					clog.Errorf("Notifications config: set webhook failed: %v", err)
-					http.Error(w, "failed to set telegram webhook: "+err.Error(), http.StatusBadRequest)
-					return
+					webhookWarning = "Настройки сохранены, но не удалось подключить входящие команды Telegram. Проверьте webhook и отправьте тестовое сообщение."
+				} else {
+					clog.Infof("Notifications config: telegram webhook set successfully")
 				}
-				clog.Infof("Notifications config: telegram webhook set successfully")
 			}
 		}
 
-		writeJSON(w, map[string]interface{}{"config": h.notifyStore.Get(), "warning": warning})
+		writeJSON(w, map[string]interface{}{"config": h.notifyStore.Get(), "warning": webhookWarning})
 	}).ServeHTTP(w, r)
 }
 

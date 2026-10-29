@@ -73,6 +73,7 @@ type Stats struct {
 	memory          []Memory
 	cpu             []CPU
 	disks           []DiskUsage
+	diskUnavailable []string
 	ssh             []SSHConnections
 	sshSessions     map[string]sshSessionState
 	deviceNames     map[string]string
@@ -107,7 +108,10 @@ func (s *Stats) AddRequest(host, country string) {
 
 // RecordMemory records the current memory usage (both absolute and percentage)
 func (s *Stats) RecordMemory() {
-	v, _ := mem.VirtualMemory()
+	v, err := mem.VirtualMemory()
+	if err != nil || v == nil {
+		return
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,40 +146,56 @@ func (s *Stats) RecordCPU() {
 	}
 }
 
-// RecordDisks records usage for all mounted disks.
-func (s *Stats) RecordDisks() {
-	partitions, err := disk.Partitions(false)
-	if err != nil {
-		return
-	}
-
-	now := time.Now()
-	entries := make([]DiskUsage, 0, len(partitions))
-	for _, partition := range partitions {
-		if partition.Mountpoint == "" || partition.Device == "" {
-			continue
-		}
-		if partition.Mountpoint != "/" && !strings.HasPrefix(partition.Mountpoint, "/media/") {
-			continue
-		}
-		usage, err := disk.Usage(partition.Mountpoint)
-		if err != nil {
-			continue
-		}
-		entries = append(entries, DiskUsage{Time: now, Mountpoint: partition.Mountpoint, Device: partition.Device, Fstype: partition.Fstype, UsedPercent: usage.UsedPercent, Free: usage.Free, Total: usage.Total})
-	}
-
-	if len(entries) == 0 {
-		return
-	}
-
+// RecordDisks preserves the original / and /media selection, plus explicit paths.
+func (s *Stats) RecordDisks(extraPaths ...string) {
+	partitions, _ := disk.Partitions(false)
+	entries, unavailable := collectDisks(partitions, extraPaths, disk.Usage, time.Now())
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.disks, s.diskUnavailable = entries, unavailable
+}
 
-	s.disks = append(s.disks, entries...)
-	if len(s.disks) > 4000 {
-		s.disks = s.disks[len(s.disks)-4000:]
+func collectDisks(partitions []disk.PartitionStat, extra []string, usageFor func(string) (*disk.UsageStat, error), now time.Time) ([]DiskUsage, []string) {
+	selected := map[string]disk.PartitionStat{}
+	for _, partition := range partitions {
+		if partition.Device != "" && (partition.Mountpoint == "/" || strings.HasPrefix(partition.Mountpoint, "/media/")) {
+			selected[partition.Mountpoint] = partition
+		}
 	}
+	for _, p := range extra {
+		if _, exists := selected[p]; !exists {
+			selected[p] = disk.PartitionStat{Mountpoint: p}
+		}
+	}
+	entries, unavailable := []DiskUsage{}, []string{}
+	for p, partition := range selected {
+		usage, err := usageFor(p)
+		if err != nil || usage == nil || usage.Total == 0 {
+			unavailable = append(unavailable, p)
+			continue
+		}
+		fstype := partition.Fstype
+		if fstype == "" {
+			fstype = usage.Fstype
+		}
+		entries = append(entries, DiskUsage{Time: now, Mountpoint: p, Device: partition.Device, Fstype: fstype, UsedPercent: usage.UsedPercent, Free: usage.Free, Total: usage.Total})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Mountpoint < entries[j].Mountpoint })
+	sort.Strings(unavailable)
+	return entries, unavailable
+}
+
+func (s *Stats) UnavailableDisks() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]string{}, s.diskUnavailable...)
+}
+
+// LatestDisks returns a detached snapshot, including collection time for alerts.
+func (s *Stats) LatestDisks() []DiskUsage {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]DiskUsage(nil), s.disks...)
 }
 
 // RecordSSHConnections records current established SSH sessions on port 22.
@@ -356,6 +376,7 @@ func (s *Stats) GetDiskData() []map[string]interface{} {
 	latest := []map[string]interface{}{}
 	for mountpoint, entry := range latestByMount {
 		latest = append(latest, map[string]interface{}{
+			"sampledAt":   entry.Time,
 			"mountpoint":  mountpoint,
 			"device":      entry.Device,
 			"fstype":      entry.Fstype,
@@ -365,6 +386,7 @@ func (s *Stats) GetDiskData() []map[string]interface{} {
 		})
 	}
 
+	sort.Slice(latest, func(i, j int) bool { return latest[i]["mountpoint"].(string) < latest[j]["mountpoint"].(string) })
 	return latest
 }
 

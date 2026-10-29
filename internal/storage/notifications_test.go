@@ -1,9 +1,56 @@
 package storage
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestDiskConfigAndFailedSave(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "n.json")
+	s := NewNotificationStore(path)
+	cfg := s.Get()
+	if cfg.DiskWarning != 85 || cfg.DiskCritical != 95 || cfg.DiskReminderHours != 6 || len(cfg.DiskPaths) != 0 {
+		t.Fatal("disk defaults", cfg)
+	}
+	paths, err := ParseDiskPaths(dir + "\n" + dir)
+	if err != nil || len(paths) != 1 {
+		t.Fatal("dedup paths", paths, err)
+	}
+	for _, bad := range []string{"relative/path", "../escape", dir + "\x00", strings.Repeat(dir+"/x\n", 1) + "relative"} {
+		if _, err := ParseDiskPaths(bad); err == nil {
+			t.Fatal("accepted", bad)
+		}
+	}
+	cfg.DiskPaths = paths
+	cfg.DiskWarning = 80
+	cfg.DiskCritical = 90
+	if err := s.Update(cfg); err != nil {
+		t.Fatal(err)
+	}
+	s = NewNotificationStore(path)
+	if s.Get().DiskWarning != 80 || len(s.Get().DiskPaths) != 1 {
+		t.Fatal("not persisted")
+	}
+	copy := s.Get()
+	copy.DiskPaths[0] = "modified"
+	if s.Get().DiskPaths[0] == "modified" {
+		t.Fatal("alias")
+	}
+	s.path = dir
+	cfg.DiskWarning = 75
+	if err := s.Update(cfg); err == nil {
+		t.Fatal("saved over directory")
+	}
+	if s.Get().DiskWarning != 80 {
+		t.Fatal("failed save applied in memory")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("lost previous file")
+	}
+}
 
 func TestNotificationStorePersist(t *testing.T) {
 	dir := t.TempDir()

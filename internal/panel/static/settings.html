@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Настройки GPT - Router</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/panel.js" defer></script>
 </head>
 <body>
     <nav class="nav">
@@ -37,7 +38,7 @@
 
                 <div style="margin-bottom:16px;">
                     <label for="apiKey" style="display:block; margin-bottom:8px; font-weight:600;">API ключ OpenAI</label>
-                    <input class="form-control" id="apiKey" placeholder="sk-..." autocomplete="off" title="API ключ OpenAI для выполнения запросов к модели">
+                    <input type="password" class="form-control" id="apiKey" placeholder="sk-..." autocomplete="off" title="API ключ OpenAI для выполнения запросов к модели">
                     <p style="color:var(--text-secondary); margin:8px 0 0 0;">
                         Секретный ключ доступа к API. Используется для авторизации запросов к модели.
                         Рекомендуется хранить ключ приватно и периодически ротировать.

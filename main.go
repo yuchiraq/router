@@ -43,6 +43,15 @@ func main() {
 	gptStore := storage.NewGPTStore("gpt.json")
 	gptClient := gpt.NewClient(gptStore)
 	notifier := notify.NewTelegramNotifier(notifyStore)
+	diskMonitor := notify.NewDiskMonitor(notifier)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			diskMonitor.Check(time.Now(), stats.LatestDisks())
+			<-ticker.C
+		}
+	}()
 	backupStore.OnResult = func(err error, archivePath string) {
 		if err != nil {
 			notifier.Notify("backup_failure", "backup-failure", "❌ Backup failed\n"+err.Error())
@@ -57,7 +66,7 @@ func main() {
 		for {
 			stats.RecordMemory()
 			stats.RecordCPU()
-			stats.RecordDisks()
+			stats.RecordDisks(notifyStore.Get().DiskPaths...)
 			stats.RecordSSHConnections()
 			time.Sleep(5 * time.Second)
 		}
@@ -124,6 +133,10 @@ func main() {
 	}()
 
 	// --- Proxy (Ports 80 & 443) ---
+	if os.Getenv("ROUTER_PANEL_ONLY") == "1" {
+		clog.Infof("Panel-only mode: HTTP/HTTPS proxy listeners are disabled")
+		select {}
+	}
 	proxyHandler := proxy.NewProxy(store, stats, ipReputation, notifier)
 	proxyMux := http.NewServeMux()
 	proxyMux.Handle("/", proxyHandler)

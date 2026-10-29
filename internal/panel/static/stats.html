@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stats - Router</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/panel.js" defer></script>
     <script src="/static/chart.js"></script>
     <script src="/static/color-hash.js"></script>
     <style>
@@ -24,6 +25,7 @@
             .dashboard-canvas { min-height:1400px; }
         }
     </style>
+    <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
     <nav class="nav">
@@ -44,41 +46,41 @@
         </div>
 
         <div class="stats-toolbar">
-            <p>Перетаскивайте карточки по всей ширине и меняйте размер за угол (↘).</p>
-            <button type="button" class="btn" id="reset-layout-btn">Reset layout</button>
+            <p id="stats-status" role="status">Загрузка показателей…</p>
+            <div class="form-inline layout-tools"><label for="layout-mode">Расположение</label><select id="layout-mode" class="form-control"><option value="grid">Сетка</option><option value="free">Свободное</option></select><button type="button" class="btn btn-icon" id="reset-layout-btn" title="Сбросить расположение" aria-label="Сбросить расположение"><span class="icon" style="--icon:url(/static/icons/rotate-ccw.svg)" aria-hidden="true"></span></button></div>
         </div>
 
         <section class="dashboard-canvas" id="dashboard-canvas">
             <div class="card dashboard-widget" data-widget-id="memory" style="left:0px;top:0px;width:480px;height:320px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>System Memory Usage</span></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Оперативная память</span></div>
                 <div class="card-body"><canvas id="memory-chart"></canvas></div><div class="widget-resizer" title="Resize"></div>
             </div>
             <div class="card dashboard-widget" data-widget-id="cpu" style="left:500px;top:0px;width:480px;height:320px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>System CPU Usage</span></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Процессор</span></div>
                 <div class="card-body"><canvas id="cpu-chart"></canvas></div><div class="widget-resizer" title="Resize"></div>
             </div>
             <div class="card dashboard-widget" data-widget-id="requests" style="left:1000px;top:0px;width:560px;height:320px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Requests Per Hour</span></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Запросы по часам</span></div>
                 <div class="card-body"><canvas id="requests-chart"></canvas></div><div class="widget-resizer" title="Resize"></div>
             </div>
             <div class="card dashboard-widget" data-widget-id="ssh" style="left:0px;top:340px;width:760px;height:340px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>SSH Connections</span></div>
-                <div class="card-body"><div class="ssh-current" id="ssh-current">Current established: 0</div><div class="ssh-table ssh-table-head"><div>IP</div><div>Country</div><div>Date</div><div>Time</div><div>Device</div></div><div class="ssh-table" id="ssh-table"></div></div><div class="widget-resizer" title="Resize"></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Подключения SSH</span></div>
+                <div class="card-body"><div class="ssh-current" id="ssh-current">Активных подключений: 0</div><div class="ssh-table ssh-table-head"><div>IP</div><div>Страна</div><div>Дата</div><div>Время</div><div>Устройство</div></div><div class="ssh-table" id="ssh-table"></div></div><div class="widget-resizer" title="Resize"></div>
             </div>
             <div class="card dashboard-widget" data-widget-id="countries" style="left:780px;top:340px;width:380px;height:340px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Requests by Country</span></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>География запросов</span></div>
                 <div class="card-body"><div class="country-table" id="country-table"></div></div><div class="widget-resizer" title="Resize"></div>
             </div>
             <div class="card dashboard-widget" data-widget-id="disks" style="left:1180px;top:340px;width:380px;height:340px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Disk Usage</span></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Диски</span></div>
                 <div class="card-body"><div class="disk-table" id="disk-table"></div></div><div class="widget-resizer" title="Resize"></div>
             </div>
             <div class="card dashboard-widget" data-widget-id="suspicious" style="left:0px;top:700px;width:780px;height:360px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Suspicious IPs</span></div>
-                <div class="card-body"><div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;"><input type="text" id="manual-ban-ip" class="form-control" placeholder="Enter IP to ban (e.g. 203.0.113.10)" style="max-width:360px;"><button class="btn btn-danger" id="manual-ban-btn" type="button">Ban IP</button></div><div class="disk-table" id="suspicious-table"></div></div><div class="widget-resizer" title="Resize"></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Подозрительные IP</span></div>
+                <div class="card-body"><div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;"><input type="text" id="manual-ban-ip" class="form-control" placeholder="IP для блокировки" style="max-width:360px;"><button class="btn btn-danger" id="manual-ban-btn" type="button">Заблокировать</button></div><div class="disk-table" id="suspicious-table"></div></div><div class="widget-resizer" title="Resize"></div>
             </div>
             <div class="card dashboard-widget" data-widget-id="autobanned" style="left:800px;top:700px;width:760px;height:360px;">
-                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Auto-banned (24h)</span></div>
+                <div class="card-header"><span class="widget-handle">⋮⋮</span><span>Автоблокировки · 24 ч</span></div>
                 <div class="card-body"><div class="disk-table" id="auto-banned-table"></div></div><div class="widget-resizer" title="Resize"></div>
             </div>
         </section>
@@ -109,6 +111,7 @@
                 var chartTick = styles.getPropertyValue('--chart-tick').trim() || '#a0a0a5';
 
                 var chartOptions = {
+                    animation: false,
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
@@ -139,6 +142,7 @@
 
                 // --- Memory Chart ---
                 var memoryChartOptions = {
+                    animation: false,
                     responsive: chartOptions.responsive,
                     maintainAspectRatio: chartOptions.maintainAspectRatio,
                     scales: {
@@ -151,10 +155,10 @@
                             display: true,
                             position: 'left',
                             grid: { color: chartGrid },
-                            ticks: { color: '#32D74B' },
+                            ticks: { color: '#32876d' },
                             beginAtZero: true,
                             suggestedMax: 100,
-                            title: { display: true, text: '%', color: '#32D74B' }
+                            title: { display: true, text: '%', color: '#32876d' }
                         }
                     },
                     plugins: {
@@ -181,10 +185,10 @@
                     data: {
                         labels: [],
                         datasets: [{
-                            label: 'Used (%)',
+                            label: 'Занято (%)',
                             data: [],
-                            borderColor: '#32D74B',
-                            backgroundColor: 'rgba(50, 215, 75, 0.2)',
+                            borderColor: '#32876d',
+                            backgroundColor: 'rgba(50, 135, 109, 0.12)',
                             fill: true,
                             yAxisID: 'y'
                         }]
@@ -194,6 +198,7 @@
 
                 // --- CPU Chart ---
                 var cpuChartOptions = {
+                    animation: false,
                     responsive: chartOptions.responsive,
                     maintainAspectRatio: chartOptions.maintainAspectRatio,
                     scales: {
@@ -206,10 +211,10 @@
                             display: true,
                             position: 'left',
                             grid: { color: chartGrid },
-                            ticks: { color: '#FF9F0A' },
+                            ticks: { color: '#927136' },
                             beginAtZero: true,
                             suggestedMax: 100,
-                            title: { display: true, text: '%', color: '#FF9F0A' }
+                            title: { display: true, text: '%', color: '#927136' }
                         }
                     },
                     plugins: {
@@ -236,10 +241,10 @@
                     data: {
                         labels: [],
                         datasets: [{
-                            label: 'Used (%)',
+                            label: 'Занято (%)',
                             data: [],
-                            borderColor: '#FF9F0A',
-                            backgroundColor: 'rgba(255, 159, 10, 0.2)',
+                            borderColor: '#927136',
+                            backgroundColor: 'rgba(146, 113, 54, 0.12)',
                             fill: true,
                             yAxisID: 'y'
                         }]
@@ -257,6 +262,23 @@
                 var canvas = document.getElementById('dashboard-canvas');
                 var widgets = canvas ? Array.prototype.slice.call(canvas.querySelectorAll('.dashboard-widget')) : [];
                 var layoutKey = 'router_stats_layout_v2';
+                var mode = document.getElementById('layout-mode');
+                try { mode.value = localStorage.getItem('router_stats_mode') === 'free' ? 'free' : 'grid'; } catch (_) {}
+                function applyMode() {
+                    canvas.classList.toggle('free-layout', mode.value === 'free' && window.innerWidth > 1100);
+                    if (canvas.classList.contains('free-layout')) widgets.forEach(function(widget) { widget.style.width = Math.min(parseInt(widget.style.width)||360,canvas.clientWidth)+'px'; widget.style.left = Math.max(0,Math.min(parseInt(widget.style.left)||0,canvas.clientWidth-widget.offsetWidth))+'px'; });
+                    memoryChart.resize(); cpuChart.resize(); requestsChart.resize();
+                }
+                mode.addEventListener('change', function() { try { localStorage.setItem('router_stats_mode', mode.value); } catch (_) {} applyMode(); });
+                window.addEventListener('resize', applyMode);
+                applyMode();
+                window.addEventListener('router-theme-change', function() {
+                    var colors = getComputedStyle(document.documentElement);
+                    [memoryChart,cpuChart,requestsChart].forEach(function(chart) {
+                        Object.values(chart.options.scales).forEach(function(scale) { scale.grid.color = colors.getPropertyValue('--chart-grid').trim(); scale.ticks.color = colors.getPropertyValue('--chart-tick').trim(); });
+                        chart.options.plugins.legend.labels.color = colors.getPropertyValue('--chart-tick').trim(); chart.update();
+                    });
+                });
 
                 function clamp(value, min, max) {
                     return Math.max(min, Math.min(max, value));
@@ -274,7 +296,7 @@
                             z: parseInt(widgets[i].style.zIndex || '1', 10)
                         });
                     }
-                    localStorage.setItem(layoutKey, JSON.stringify(payload));
+                    try { localStorage.setItem(layoutKey, JSON.stringify(payload)); } catch (_) {}
                 }
 
                 function refreshCanvasHeight() {
@@ -288,8 +310,12 @@
                 }
 
                 function restoreLayout() {
-                    var savedRaw = localStorage.getItem(layoutKey);
+                    var savedRaw;
+                    try { savedRaw = localStorage.getItem(layoutKey); } catch (_) {}
                     if (!savedRaw) {
+                        var columns = canvas.clientWidth > 1200 ? 3 : 2;
+                        var width = (canvas.clientWidth - (columns-1)*16) / columns;
+                        widgets.forEach(function(widget, index) { widget.style.left = ((index%columns)*(width+16))+'px'; widget.style.top = (Math.floor(index/columns)*356)+'px'; widget.style.width = width+'px'; widget.style.height = '340px'; });
                         refreshCanvasHeight();
                         return;
                     }
@@ -324,6 +350,7 @@
                     var handle = widget.querySelector('.card-header');
                     if (!handle) return;
                     handle.addEventListener('mousedown', function(ev) {
+                        if (!canvas.classList.contains('free-layout')) return;
                         if (ev.target && ev.target.classList && ev.target.classList.contains('widget-resizer')) return;
                         bringToFront(widget);
                         widget.classList.add('dragging');
@@ -333,7 +360,7 @@
                         var startTop = parseInt(widget.style.top || '0', 10);
 
                         function onMove(moveEv) {
-                            var nextLeft = startLeft + (moveEv.clientX - startX);
+                            var nextLeft = clamp(startLeft + (moveEv.clientX - startX), 0, Math.max(0, canvas.clientWidth-widget.offsetWidth));
                             var nextTop = Math.max(0, startTop + (moveEv.clientY - startY));
                             widget.style.left = String(nextLeft) + 'px';
                             widget.style.top = String(nextTop) + 'px';
@@ -356,6 +383,7 @@
                     var resizer = widget.querySelector('.widget-resizer');
                     if (!resizer) return;
                     resizer.addEventListener('mousedown', function(ev) {
+                        if (!canvas.classList.contains('free-layout')) return;
                         ev.preventDefault();
                         ev.stopPropagation();
                         bringToFront(widget);
@@ -394,12 +422,13 @@
                 var resetLayoutBtn = document.getElementById('reset-layout-btn');
                 if (resetLayoutBtn) {
                     resetLayoutBtn.addEventListener('click', function() {
-                        localStorage.removeItem(layoutKey);
+                        try { localStorage.removeItem(layoutKey); } catch (_) {}
                         window.location.reload();
                     });
                 }
 
                 restoreLayout();
+                applyMode();
 
                 // --- Data Fetching ---
 
@@ -442,8 +471,12 @@
                     });
                 }
 
+                var fetching = false;
+                function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
                 function fetchData() {
-                    fetch('/stats/data', { credentials: 'same-origin' })
+                    if (fetching || document.hidden) return;
+                    fetching = true;
+                    return fetch('/stats/data', { credentials: 'same-origin', headers: {Accept:'application/json'} })
                         .then(function(response) {
                             if (!response.ok) {
                                 throw new Error('HTTP error! status: ' + response.status);
@@ -451,6 +484,7 @@
                             return response.json();
                         })
                         .then(function(data) {
+                            document.getElementById('stats-status').textContent = 'Обновлено в ' + new Date().toLocaleTimeString('ru-RU');
                             if (data.memory && data.memory.labels.length > 0) {
                                 memoryChart.data.labels = data.memory.labels;
                                 memoryChart.data.datasets[0].data = data.memory.percents;
@@ -513,7 +547,7 @@
 
                             if (data.ssh) {
                                 var sshCurrent = document.getElementById('ssh-current');
-                                sshCurrent.textContent = 'Current established: ' + (data.ssh.current || 0);
+                                sshCurrent.textContent = 'Активных подключений: ' + (data.ssh.current || 0);
 
                                 var sshTable = document.getElementById('ssh-table');
                                 var sshSessions = data.ssh.sessions || [];
@@ -521,14 +555,14 @@
                                 for (var si = 0; si < sshSessions.length; si++) {
                                     var session = sshSessions[si];
                                     sshRows += '<div class="ssh-row">' +
-                                        '<div class="ssh-ip">' + session.ip + ':' + session.port + '</div>' +
-                                        '<div class="ssh-country">' + session.countryName + ' (' + session.countryCode + ')</div>' +
-                                        '<div class="ssh-date">' + session.date + '</div>' +
-                                        '<div class="ssh-time">' + session.time + '</div>' +
-                                        '<div class="ssh-device">' + session.device + '</div>' +
+                                        '<div class="ssh-ip">' + escapeHTML(session.ip) + ':' + session.port + '</div>' +
+                                        '<div class="ssh-country">' + escapeHTML(session.countryName) + ' (' + escapeHTML(session.countryCode) + ')</div>' +
+                                        '<div class="ssh-date">' + escapeHTML(session.date) + '</div>' +
+                                        '<div class="ssh-time">' + escapeHTML(session.time) + '</div>' +
+                                        '<div class="ssh-device">' + escapeHTML(session.device) + '</div>' +
                                     '</div>';
                                 }
-                                sshTable.innerHTML = sshRows || '<div class="disk-empty">No active SSH sessions.</div>';
+                                sshTable.innerHTML = sshRows || '<div class="disk-empty">Нет активных SSH-подключений</div>';
                             }
 
                             if (data.countries) {
@@ -537,11 +571,11 @@
                                 for (var ci = 0; ci < data.countries.length; ci++) {
                                     var country = data.countries[ci];
                                     countryRows += '<div class="country-row">' +
-                                        '<div class="country-name">' + country.name + ' <span>(' + country.code + ')</span></div>' +
+                                        '<div class="country-name">' + escapeHTML(country.name) + ' <span>(' + escapeHTML(country.code) + ')</span></div>' +
                                         '<div class="country-count">' + country.count + '</div>' +
                                     '</div>';
                                 }
-                                countryTable.innerHTML = countryRows || '<div class="disk-empty">No country data yet.</div>';
+                                countryTable.innerHTML = countryRows || '<div class="disk-empty">Запросов пока нет</div>';
                             }
 
                             if (data.disks) {
@@ -551,19 +585,20 @@
                                     var disk = data.disks[di];
                                     rows += '<div class="disk-row">' +
                                         '<div class="disk-main">' +
-                                            '<div class="disk-title">' + disk.mountpoint + '</div>' +
-                                            '<div class="disk-subtitle">' + disk.device + ' • ' + disk.fstype + '</div>' +
+                                            '<div class="disk-title">' + escapeHTML(disk.mountpoint) + '</div>' +
+                                            '<div class="disk-subtitle">' + [disk.device,disk.fstype].filter(Boolean).map(escapeHTML).join(' • ') + '</div>' +
                                         '</div>' +
                                         '<div class="disk-metrics">' +
-                                            '<div><strong>' + disk.usedPercent.toFixed(1) + '%</strong> used</div>' +
-                                            '<div>' + disk.freeGB.toFixed(1) + ' GB free / ' + disk.totalGB.toFixed(1) + ' GB total</div>' +
+                                            '<div><strong>' + disk.usedPercent.toFixed(1) + '%</strong> занято</div>' +
+                                            '<div>' + disk.freeGB.toFixed(1) + ' ГиБ свободно / ' + disk.totalGB.toFixed(1) + ' ГиБ всего</div>' +
                                         '</div>' +
                                         '<div class="disk-bar">' +
-                                            '<div class="disk-bar-fill" style="width: ' + disk.usedPercent.toFixed(1) + '%"></div>' +
+                                            '<div class="disk-bar-fill ' + (disk.usedPercent >= data.diskCritical ? 'critical' : disk.usedPercent >= data.diskWarning ? 'warning' : '') + '" style="width: ' + Math.min(100,Math.max(0,disk.usedPercent)).toFixed(1) + '%"></div>' +
                                         '</div>' +
                                     '</div>';
                                 }
-                                table.innerHTML = rows || '<div class="disk-empty">No disks found.</div>';
+                                (data.diskUnavailable || []).forEach(function(p) { rows += '<div class="disk-row"><div class="disk-title">'+escapeHTML(p)+'</div><div class="disk-subtitle">Недоступен: проверьте путь и права</div></div>'; });
+                                table.innerHTML = (rows || '<div class="disk-empty">Нет данных о дисках</div>') + '<a href="/notifications#disk-settings">Настроить отслеживание</a>';
                             }
 
                             if (data.suspicious) {
@@ -572,24 +607,24 @@
                                 for (var xi = 0; xi < data.suspicious.length; xi++) {
                                     var item = data.suspicious[xi];
                                     var action = item.banned
-                                        ? '<button class="btn" data-unban-ip="' + item.ip + '">Unban</button>'
-                                        : '<button class="btn btn-danger" data-ban-ip="' + item.ip + '">Ban</button>';
+                                        ? '<button class="btn" data-unban-ip="' + escapeHTML(item.ip) + '">Разблокировать</button>'
+                                        : '<button class="btn btn-danger" data-ban-ip="' + escapeHTML(item.ip) + '">Заблокировать</button>';
                                     if (!item.banned) {
-                                        action += ' <button class="btn btn-icon" title="Remove from list" aria-label="Remove from list" data-remove-ip="' + item.ip + '">✕</button>';
+                                        action += ' <button class="btn btn-icon" title="Удалить из списка" aria-label="Удалить из списка" data-remove-ip="' + escapeHTML(item.ip) + '">✕</button>';
                                     }
                                     suspiciousRows += '<div class="disk-row">' +
                                         '<div class="disk-main">' +
-                                            '<div class="disk-title">' + item.ip + '</div>' +
-                                            '<div class="disk-subtitle">' + item.reason + ' • hits: ' + item.count + (item.autoBanned ? ' • AUTO-BAN' : '') + '</div>' +
+                                            '<div class="disk-title">' + escapeHTML(item.ip) + '</div>' +
+                                            '<div class="disk-subtitle">' + escapeHTML(item.reason) + ' • запросов: ' + item.count + (item.autoBanned ? ' • AUTO-BAN' : '') + '</div>' +
                                         '</div>' +
                                         '<div class="disk-metrics">' +
-                                            '<div>first: ' + new Date(item.firstSeen).toLocaleString() + '</div>' +
-                                            '<div>last: ' + new Date(item.lastSeen).toLocaleString() + '</div>' +
+                                            '<div>Первый: ' + new Date(item.firstSeen).toLocaleString() + '</div>' +
+                                            '<div>Последний: ' + new Date(item.lastSeen).toLocaleString() + '</div>' +
                                         '</div>' +
                                         '<div>' + action + '</div>' +
                                     '</div>';
                                 }
-                                suspiciousTable.innerHTML = suspiciousRows || '<div class="disk-empty">No suspicious IPs.</div>';
+                                suspiciousTable.innerHTML = suspiciousRows || '<div class="disk-empty">Подозрительных IP нет</div>';
 
                                 var banButtons = suspiciousTable.querySelectorAll('[data-ban-ip]');
                                 for (var bi = 0; bi < banButtons.length; bi++) {
@@ -629,17 +664,17 @@
                                     var ban = data.autoBanned[ai];
                                     autoRows += '<div class="disk-row">' +
                                         '<div class="disk-main">' +
-                                            '<div class="disk-title">' + ban.ip + '</div>' +
-                                            '<div class="disk-subtitle">' + ban.reason + ' • hits: ' + ban.count + '</div>' +
+                                            '<div class="disk-title">' + escapeHTML(ban.ip) + '</div>' +
+                                            '<div class="disk-subtitle">' + escapeHTML(ban.reason) + ' • запросов: ' + ban.count + '</div>' +
                                         '</div>' +
                                         '<div class="disk-metrics">' +
-                                            '<div>banned at: ' + new Date(ban.bannedAt).toLocaleString() + '</div>' +
-                                            '<div>until: ' + new Date(ban.banUntil).toLocaleString() + '</div>' +
+                                            '<div>Блокировка: ' + new Date(ban.bannedAt).toLocaleString() + '</div>' +
+                                            '<div>До: ' + new Date(ban.banUntil).toLocaleString() + '</div>' +
                                         '</div>' +
-                                        '<div><button class="btn" data-unban-ip="' + ban.ip + '">Unban</button></div>' +
+                                        '<div><button class="btn" data-unban-ip="' + escapeHTML(ban.ip) + '">Разблокировать</button></div>' +
                                     '</div>';
                                 }
-                                autoTable.innerHTML = autoRows || '<div class="disk-empty">No auto-banned IPs now.</div>';
+                                autoTable.innerHTML = autoRows || '<div class="disk-empty">Нет автоматических блокировок</div>';
 
                                 var autoUnbanButtons = autoTable.querySelectorAll('[data-unban-ip]');
                                 for (var aui = 0; aui < autoUnbanButtons.length; aui++) {
@@ -653,8 +688,9 @@
                             }
                         })
                         .catch(function(error) {
+                            document.getElementById('stats-status').textContent = 'Не удалось обновить показатели. Повторная попытка автоматически.';
                             console.error('Error fetching stats data:', error);
-                        });
+                        }).finally(function() { fetching = false; });
                 }
 
                 var manualBanBtn = document.getElementById('manual-ban-btn');
