@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/url"
 	"router/internal/clog"
 	"sort"
 	"strings"
@@ -14,11 +13,17 @@ import (
 
 // Rule represents a routing rule with its status and last access time
 type Rule struct {
-	Host        string    `json:"-"` // Host is the map key, not stored in the struct's JSON
-	Target      string    `json:"target"`
-	Maintenance bool      `json:"maintenance"`
-	LastAccess  time.Time `json:"-"`
-	ServiceDown bool      `json:"-"`
+	Host            string    `json:"-"` // Host is the map key, not stored in the struct's JSON
+	Target          string    `json:"target"`
+	Maintenance     bool      `json:"maintenance"`
+	LastAccess      time.Time `json:"-"`
+	ServiceDown     bool      `json:"-"`
+	HealthCheckedAt time.Time `json:"-"`
+	HealthError     string    `json:"-"`
+	healthFailures  int
+	healthSuccesses int
+	healthRevision  uint64
+	healthGeneration uint64
 }
 
 // RuleStore manages the routing rules
@@ -28,6 +33,8 @@ type RuleStore struct {
 	storage         *Storage
 	MaintenanceMode bool `json:"maintenanceMode"`
 	panelAddress    string
+	healthMu        sync.Mutex
+	healthGeneration uint64
 }
 
 // NewRuleStore creates a new RuleStore
@@ -48,7 +55,10 @@ func NewRuleStore(storage *Storage) *RuleStore {
 		rs.MaintenanceMode = maintenanceMode
 	}
 
-	go rs.startHealthCheck()
+	for _, rule := range rs.rules {
+		rs.healthGeneration++
+		rule.healthGeneration = rs.healthGeneration
+	}
 	return rs
 }
 
@@ -58,7 +68,8 @@ func (s *RuleStore) Add(host, target string) error {
 	defer s.mu.Unlock()
 	// The Host field is primarily for template display and is populated by the All() method.
 	previous, existed := s.rules[host]
-	s.rules[host] = &Rule{Target: target}
+	s.healthGeneration++
+	s.rules[host] = &Rule{Target: target, healthGeneration: s.healthGeneration}
 	if err := s.storage.Save(s.rules, s.MaintenanceMode); err != nil {
 		if existed {
 			s.rules[host] = previous
@@ -170,7 +181,7 @@ func (s *RuleStore) IsPanelTarget(target string) bool {
 	if !strings.Contains(target, "://") {
 		target = "http://" + target
 	}
-	u, err := url.Parse(target)
+	u, err := ParseTarget(target)
 	if err != nil || u.Scheme != "http" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
 		return false
 	}
@@ -200,54 +211,4 @@ func (s *RuleStore) SetRuleMaintenance(host string, enabled bool) error {
 		return err
 	}
 	return nil
-}
-
-// startHealthCheck periodically checks the health of the services
-func (s *RuleStore) startHealthCheck() {
-	for {
-		time.Sleep(1 * time.Minute) // Check every minute
-		s.checkServices()
-	}
-}
-
-// checkServices attempts to connect to each service to check its status
-func (s *RuleStore) checkServices() {
-	for _, rule := range s.All() {
-		// Clean up the target address for dialing
-		targetAddr := rule.Target
-		if strings.HasPrefix(targetAddr, "https://") {
-			targetAddr = strings.TrimPrefix(targetAddr, "https://")
-		} else if strings.HasPrefix(targetAddr, "http://") {
-			targetAddr = strings.TrimPrefix(targetAddr, "http://")
-		}
-
-		// If the address has no port, Dial will fail. We need to split and check.
-		// This is a simplified health check.
-		_, _, err := net.SplitHostPort(targetAddr)
-		if err != nil {
-			// If splitting fails, it might be because there's no port.
-			// For a simple health check, we can just skip or assume a default port.
-			// For now, we'll log it and mark it as potentially down.
-			// A robust solution would be more complex.
-			clog.Warnf("Could not parse target for health check: %s. Assuming down.", rule.Target)
-			s.setServiceDown(rule, true)
-			continue
-		}
-
-		conn, err := net.DialTimeout("tcp", targetAddr, 5*time.Second)
-		if err != nil {
-			s.setServiceDown(rule, true)
-		} else {
-			s.setServiceDown(rule, false)
-			conn.Close()
-		}
-	}
-}
-
-func (s *RuleStore) setServiceDown(snapshot *Rule, down bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if current, ok := s.rules[snapshot.Host]; ok && current.Target == snapshot.Target {
-		current.ServiceDown = down
-	}
 }

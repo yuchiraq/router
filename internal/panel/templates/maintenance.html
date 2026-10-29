@@ -1,17 +1,36 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Технические работы</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta name="robots" content="noindex,nofollow"><title>Временная пауза</title>
+    <link rel="stylesheet" href="/_router/maintenance/assets/maintenance.css">
+    <script src="/_router/maintenance/assets/maintenance.js" defer></script>
+    <script src="/_router/maintenance/assets/grid.js" defer></script>
+    <script src="/_router/maintenance/assets/tile.js" defer></script>
+    <script src="/_router/maintenance/assets/game_manager.js" defer></script>
+    <script src="/_router/maintenance/assets/game.js" defer></script>
 </head>
-<body class="maintenance-body">
-    <div class="maintenance">
-        <div class="maintenance-icon">⚙️</div>
-        <h1>Технические работы</h1>
-        <p>Мы временно отключили сайт для проведения плановых работ. Пожалуйста, зайдите немного позже.</p>
-        <p>Приносим извинения за неудобства.</p>
-    </div>
+<body data-preview="{{if .Preview}}true{{else}}false{{end}}">
+    <div class="ambient-grid" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <header class="topbar"><span class="brand"><img src="/_router/maintenance/assets/network.svg" width="22" height="22" alt="">Router</span><div class="top-actions">{{if .Preview}}<span class="preview-label">Предпросмотр</span>{{end}}<button id="theme-button" class="icon-button" type="button" title="Переключить тему" aria-label="Переключить тему"><span class="icon theme-icon" aria-hidden="true"></span></button></div></header>
+    <main>
+        <section class="intro" aria-labelledby="page-title">
+            <div class="signal-symbol" aria-hidden="true"><img src="/_router/maintenance/assets/network.svg" alt="" width="28" height="28"><span></span></div>
+            <div class="status-badge"><span class="status-dot"></span><span id="service-label">{{if .Automatic}}Сервис временно недоступен{{else}}Техническое обслуживание{{end}}</span></div>
+            <h1 id="page-title">Небольшая пауза.</h1>
+            <p id="service-description">{{if .Automatic}}Ожидаем восстановления соединения с сайтом.{{else}}На сайте идут технические работы.{{end}}</p>
+            <div class="availability-actions"><button class="primary-button" id="check-service" type="button"><span class="icon retry-icon" aria-hidden="true"></span>Проверить сайт</button><a id="return-link" class="primary-button" href="/" hidden>Вернуться на сайт<span class="icon right-icon" aria-hidden="true"></span></a></div>
+            <p id="check-result" class="check-result" role="status" aria-live="polite">{{if .Preview}}Это предпросмотр страницы обслуживания{{else}}Состояние проверяется автоматически{{end}}</p>
+        </section>
+        <section class="game-section" aria-labelledby="game-title">
+            <div class="game-heading"><div><span class="game-eyebrow">Пока есть минутка</span><h2 id="game-title">2048<span class="game-accent">.</span></h2></div><div class="scores"><div><span>Счёт</span><strong id="game-score">0</strong></div><div><span>Рекорд</span><strong id="game-best">0</strong></div></div></div>
+            <div id="game-board" class="game-board" role="group" tabindex="0" aria-label="2048. Управление стрелками или свайпом"></div>
+            <div class="game-toolbar"><div class="direction-buttons" role="group" aria-label="Направление хода"><button class="icon-button" type="button" data-move="3" title="Влево" aria-label="Ход влево"><span class="icon left-icon"></span></button><button class="icon-button" type="button" data-move="0" title="Вверх" aria-label="Ход вверх"><span class="icon up-icon"></span></button><button class="icon-button" type="button" data-move="2" title="Вниз" aria-label="Ход вниз"><span class="icon down-icon"></span></button><button class="icon-button" type="button" data-move="1" title="Вправо" aria-label="Ход вправо"><span class="icon right-icon"></span></button></div><button class="icon-button" type="button" id="restart-game" title="Новая игра" aria-label="Новая игра"><span class="icon retry-icon"></span></button></div>
+            <div class="game-result" id="game-result" role="status" aria-live="polite"></div>
+            <button class="primary-button" id="continue-game" type="button" hidden>Продолжить игру</button>
+            <noscript>Для игры нужен JavaScript. <a href="/">Открыть сайт</a></noscript>
+        </section>
+    </main>
+    <footer><span>Router</span><a href="/_router/maintenance/assets/license.txt" target="_blank" rel="noopener">2048 · Gabriele Cirulli</a></footer>
 </body>
 </html>

@@ -5,26 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход · Router</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/design.css">
     <script src="/static/panel.js" defer></script>
-    <style>
-        body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
-        .login-card{ width:min(420px,92vw); }
-        .logo{ font-size:28px; font-weight:700; margin-bottom:12px; text-align:center; }
-    </style>
+    <script src="/static/design.js" defer></script>
 </head>
-<body>
-    <div class="card login-card">
-        <div class="card-body">
-            <div class="logo">Router</div>
-            <p style="text-align:center;color:var(--text-secondary);margin-bottom:16px;">Вход в панель управления</p>
+<body class="auth-page">
+    <header class="auth-top"><div class="auth-brand"><span class="icon" style="--icon:url(/static/icons/network.svg)" aria-hidden="true"></span>Router</div><button class="btn btn-icon" type="button" data-cycle-theme aria-label="Переключить тему" title="Переключить тему"><span class="icon" style="--icon:url(/static/icons/sun-moon.svg)" aria-hidden="true"></span></button></header>
+    <main class="auth-content">
+            <div class="auth-emblem"><span class="icon" style="--icon:url(/static/icons/network.svg)" aria-hidden="true"></span></div>
+            <h1>Вход в Router</h1>
+            <p>Панель управления сервисами</p>
             <form id="login-form">
             <label class="field" style="margin-bottom:16px;">Логин<input id="username" class="form-control" autocomplete="username" required></label>
             <label class="field" style="margin-bottom:20px;">Пароль<input id="password" class="form-control" type="password" autocomplete="current-password" required></label>
-            <button type="submit" class="btn" id="login-btn" style="width:100%;">Войти</button>
+            <button type="submit" class="btn" id="login-btn">Войти<span class="icon" style="--icon:url(/static/icons/arrow-right.svg)" aria-hidden="true"></span></button>
             </form>
             <p id="status" style="margin-top:10px;color:var(--accent-red);"></p>
-        </div>
-    </div>
+            <p class="auth-footer">Доступ для администратора</p>
+    </main>
 <script>
 (function(){
   function setStatus(t){document.getElementById('status').textContent=t||''}

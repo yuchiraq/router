@@ -184,6 +184,38 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	h.serveStaticAuth("internal/panel/static/stats.html").ServeHTTP(w, r)
 }
 
+func (h *Handler) MaintenancePreview(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := h.templates["maintenance"].Execute(w, map[string]bool{"Preview": true, "Automatic": true}); err != nil {
+			clog.Errorf("maintenance preview: %v", err)
+		}
+	}).ServeHTTP(w, r)
+}
+
+func (h *Handler) RouteStatuses(w http.ResponseWriter, r *http.Request) {
+	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		rows := []map[string]interface{}{}
+		for _, rule := range h.store.All() {
+			rows = append(rows, map[string]interface{}{
+				"host": rule.Host, "maintenance": rule.Maintenance, "down": rule.ServiceDown,
+				"checkedAt": rule.HealthCheckedAt, "error": rule.HealthError, "panel": h.store.IsPanelTarget(rule.Target),
+			})
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, map[string]interface{}{"rules": rows, "maintenance": h.store.IsMaintenanceMode()})
+	}).ServeHTTP(w, r)
+}
+
 // Backups serves backup management page.
 func (h *Handler) Backups(w http.ResponseWriter, r *http.Request) {
 	h.serveStaticAuth("internal/panel/static/backups.html").ServeHTTP(w, r)
@@ -210,6 +242,10 @@ func (h *Handler) AddRule(w http.ResponseWriter, r *http.Request) {
 		target := strings.TrimSpace(r.FormValue("target"))
 		if host == "" || target == "" {
 			http.Error(w, "Укажите домен и адрес сервиса", http.StatusBadRequest)
+			return
+		}
+		if _, err := storage.ParseTarget(target); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if _, exists := h.store.GetRule(host); exists {

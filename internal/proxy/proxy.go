@@ -1,12 +1,11 @@
 package proxy
 
 import (
+	"encoding/json"
 	"html/template"
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
-	"path/filepath"
 	"router/internal/clog"
 	"router/internal/notify"
 	"router/internal/stats"
@@ -54,14 +53,29 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rule, ok := p.store.GetRule(r.Host)
 	panelRoute := ok && p.store.IsPanelTarget(rule.Target)
-	if p.store.IsMaintenanceMode() && !panelRoute {
-		clog.Infof("[maintenance-global] %s %s host=%s", r.Method, r.URL.Path, r.Host)
-		if serveMaintenanceStatic(w, r) {
+	if ok && ServeMaintenanceAsset(w, r) {
+		return
+	}
+	if r.URL.Path == "/_router/maintenance/status" {
+		if !ok {
+			http.NotFound(w, r)
 			return
 		}
-
-		w.WriteHeader(http.StatusServiceUnavailable)
-		p.maintenanceTmpl.Execute(w, nil)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		available := panelRoute || !p.store.IsMaintenanceMode() && !rule.Maintenance && !rule.ServiceDown && !rule.HealthCheckedAt.IsZero()
+		if r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(map[string]bool{"available": available})
+		}
+		return
+	}
+	if p.store.IsMaintenanceMode() && !panelRoute {
+		clog.Infof("[maintenance-global] %s %s host=%s", r.Method, r.URL.Path, r.Host)
+		p.serveMaintenance(w, r, false)
 		return
 	}
 
@@ -90,25 +104,16 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if rule.Maintenance && !panelRoute {
+	if (rule.Maintenance || rule.ServiceDown) && !panelRoute {
 		clog.Infof("[maintenance-rule] %s %s host=%s", r.Method, r.URL.Path, r.Host)
-		if serveMaintenanceStatic(w, r) {
-			return
-		}
-
-		w.WriteHeader(http.StatusServiceUnavailable)
-		p.maintenanceTmpl.Execute(w, nil)
+		p.serveMaintenance(w, r, !rule.Maintenance && rule.ServiceDown)
 		return
 	}
 
 	// Add request to stats with the specific host
 	p.stats.AddRequest(r.Host, stats.CountryFromRequest(r))
 
-	target := rule.Target
-	if !strings.Contains(target, "://") {
-		target = "http://" + target
-	}
-	targetURL, err := url.Parse(target)
+	targetURL, err := storage.ParseTarget(rule.Target)
 	if err != nil {
 		clog.Errorf("Error parsing target URL for host %s: %v", r.Host, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -116,6 +121,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		if r.Context().Err() != nil {
+			return
+		}
+		p.store.ReportServiceFailure(rule.Host, rule.Target)
+		clog.Warnf("upstream unavailable host=%s", rule.Host)
+		p.serveMaintenance(w, r, true)
+	}
 
 	// Update the request headers
 	incomingHost := r.Host
@@ -154,18 +167,28 @@ func setWorkServiceHeaders(r *http.Request, incomingHost, socketIP string) {
 	r.Header.Del("CF-Connecting-IP")
 }
 
-func serveMaintenanceStatic(w http.ResponseWriter, r *http.Request) bool {
-	if r.URL.Path != "/static/styles.css" {
-		return false
+func (p *Proxy) serveMaintenance(w http.ResponseWriter, r *http.Request, automatic bool) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Retry-After", "15")
+	w.Header().Set("X-Router-Maintenance", "1")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	htmlResponse := (r.Method == http.MethodGet || r.Method == http.MethodHead) && (strings.Contains(r.Header.Get("Accept"), "text/html") || r.Header.Get("Accept") == "")
+	if htmlResponse {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	} else {
+		w.Header().Set("Content-Type", "application/json")
 	}
-
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return true
+	w.WriteHeader(http.StatusServiceUnavailable)
+	if r.Method == http.MethodHead {
+		return
 	}
-
-	http.ServeFile(w, r, filepath.Clean("internal/panel/static/styles.css"))
-	return true
+	if htmlResponse {
+		if err := p.maintenanceTmpl.Execute(w, map[string]bool{"Automatic": automatic}); err != nil {
+			clog.Errorf("maintenance page: %v", err)
+		}
+	} else {
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "service_unavailable", "message": "Сервис временно недоступен"})
+	}
 }
 
 func clientIP(r *http.Request) string {

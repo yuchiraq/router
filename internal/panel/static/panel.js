@@ -102,10 +102,18 @@
             const panel = row.dataset.panel === 'true';
             const own = row.querySelector('input[name="maintenance"]').checked;
             const state = row.querySelector('.route-state');
-            state.textContent = panel ? 'Панель управления' : global ? 'Общее обслуживание' : own ? 'Обслуживание' : 'Маршрут включён';
-            state.classList.toggle('is-paused',!panel && (global || own));
+            const down = row.dataset.down === 'true';
+            const checked = row.dataset.checked && !row.dataset.checked.startsWith('0001');
+            const paused = !panel && (global || own || down);
+            row.dataset.state = paused ? 'paused' : panel || checked ? 'online' : 'pending';
+            state.textContent = panel ? 'Панель управления' : global ? 'Общая пауза' : own ? 'Ручная пауза' : down ? 'Авто: сервис недоступен' : checked ? 'Доступен' : 'Проверка…';
+            state.classList.toggle('is-paused',paused);
+            const time = row.querySelector('.health-time');
+            if (time) time.textContent = checked ? 'Проверен в '+new Date(row.dataset.checked).toLocaleTimeString('ru-RU') : '';
         });
+        window.dispatchEvent(new Event('router-routes-change'));
     }
+    window.RouterUI.refreshMaintenance = renderMaintenance;
     if (document.querySelector('.maintenance-form')) renderMaintenance();
     document.querySelectorAll('form[data-route-form]').forEach(form => {
         let pending = false;

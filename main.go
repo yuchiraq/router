@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"log"
 	"net/http"
@@ -89,6 +90,7 @@ func main() {
 	}
 	adminStore := storage.NewAdminStore("admin.json", adminUser, adminPass)
 	store.SetPanelAddress(panelAddr)
+	go store.StartHealthChecks(context.Background())
 
 	// --- Admin Panel ---
 	go func() {
@@ -127,6 +129,13 @@ func main() {
 		panelMux.HandleFunc("/ws/logs", panelHandler.Logs)
 		panelMux.HandleFunc("/add", panelHandler.AddRule)
 		panelMux.HandleFunc("/rule/maintenance", panelHandler.RuleMaintenance)
+		panelMux.HandleFunc("/routes/status", panelHandler.RouteStatuses)
+		panelMux.HandleFunc("/maintenance-preview", panelHandler.MaintenancePreview)
+		panelMux.HandleFunc("/_router/maintenance/assets/", func(w http.ResponseWriter, r *http.Request) {
+			if !proxy.ServeMaintenanceAsset(w, r) {
+				http.NotFound(w, r)
+			}
+		})
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
 		clog.Infof("Starting admin panel on %s", panelAddr)
 		if err := http.ListenAndServe(panelAddr, panelMux); err != nil {
