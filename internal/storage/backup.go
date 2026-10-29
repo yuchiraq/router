@@ -25,17 +25,17 @@ type BackupJob struct {
 }
 
 type BackupEntry struct {
-	JobID      string    `json:"jobId"`
-	JobName    string    `json:"jobName"`
-	Path       string    `json:"path"`
-	CreatedAt  time.Time `json:"createdAt"`
-	SizeBytes  int64     `json:"sizeBytes"`
+	JobID     string    `json:"jobId"`
+	JobName   string    `json:"jobName"`
+	Path      string    `json:"path"`
+	CreatedAt time.Time `json:"createdAt"`
+	SizeBytes int64     `json:"sizeBytes"`
 }
 
 type backupState struct {
-	Jobs      []BackupJob  `json:"jobs"`
+	Jobs      []BackupJob   `json:"jobs"`
 	Entries   []BackupEntry `json:"entries"`
-	LastError string       `json:"lastError,omitempty"`
+	LastError string        `json:"lastError,omitempty"`
 }
 
 type BackupStore struct {
@@ -281,9 +281,12 @@ func sanitizeName(name string) string {
 	if name == "" {
 		return "backup"
 	}
-	name = strings.ReplaceAll(name, " ", "-")
-	name = strings.ReplaceAll(name, "/", "-")
-	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.Map(func(r rune) rune {
+		if r < 32 || strings.ContainsRune(" /\\<>:\"|?*", r) {
+			return '-'
+		}
+		return r
+	}, name)
 	return name
 }
 

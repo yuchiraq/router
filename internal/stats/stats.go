@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -157,6 +158,10 @@ func (s *Stats) RecordDisks(extraPaths ...string) {
 
 func collectDisks(partitions []disk.PartitionStat, extra []string, usageFor func(string) (*disk.UsageStat, error), now time.Time) ([]DiskUsage, []string) {
 	selected := map[string]disk.PartitionStat{}
+	// Root is part of the existing default, even if partition discovery fails.
+	if runtime.GOOS != "windows" {
+		selected["/"] = disk.PartitionStat{Mountpoint: "/"}
+	}
 	for _, partition := range partitions {
 		if partition.Device != "" && (partition.Mountpoint == "/" || strings.HasPrefix(partition.Mountpoint, "/media/")) {
 			selected[partition.Mountpoint] = partition

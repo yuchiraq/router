@@ -130,3 +130,45 @@ func TestTelegramErrorsDoNotLeakToken(t *testing.T) {
 		t.Fatal("unsafe network error")
 	}
 }
+
+func TestDiskMonitorDiagnosticsAndExplicitTest(t *testing.T) {
+	store := storage.NewNotificationStore(filepath.Join(t.TempDir(), "n.json"))
+	n := NewTelegramNotifier(store)
+	transport := &diskTransport{calls: map[string]int{}}
+	n.client = &http.Client{Transport: transport}
+	m := NewDiskMonitor(n)
+	now := time.Now()
+	if !strings.Contains(m.Status(now).Reason, "выключена") {
+		t.Fatal("disabled state missing")
+	}
+	cfg := storage.NotificationConfig{Enabled: true, Token: "token", ChatIDs: []int64{1}, Events: map[string]bool{"disk_usage": true}}
+	store.Update(cfg)
+	sample := stats.DiskUsage{Time: now, Mountpoint: "/", Total: 100 << 30, Free: 1 << 30, UsedPercent: 99}
+	transport.fail = "1"
+	m.Check(now, []stats.DiskUsage{sample})
+	status := m.Status(now)
+	if status.LastError == "" || status.LastCheck.IsZero() || !status.LastSent.IsZero() {
+		t.Fatal("failed delivery looks successful", status)
+	}
+	transport.fail = ""
+	m.Check(now, []stats.DiskUsage{sample})
+	status = m.Status(now)
+	if status.LastError != "" || status.LastSent.IsZero() {
+		t.Fatal("recovery not reflected", status)
+	}
+	cfg.Enabled = false
+	cfg.QuietHoursOn = true
+	cfg.QuietHoursStart = 0
+	cfg.QuietHoursEnd = 0
+	store.Update(cfg)
+	if err := n.TestDiskMessage([]stats.DiskUsage{sample}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(transport.texts[len(transport.texts)-1], "не авария") {
+		t.Fatal("test looks like real alert")
+	}
+	before := transport.calls["1"]
+	if err := n.TestDiskMessage(nil); err == nil || transport.calls["1"] != before {
+		t.Fatal("test sent without samples")
+	}
+}

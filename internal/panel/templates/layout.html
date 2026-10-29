@@ -1,7 +1,7 @@
 
 {{define "layout"}}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,10 +15,10 @@
         <div class="nav-container">
             <a href="/account" class="nav-logo">Router</a>
             <div class="nav-links">
-                <a href="/" class="{{if eq .Page "index"}}active{{end}}">Home</a>
-                <a href="/stats" class="{{if eq .Page "stats"}}active{{end}}">Stats</a>
-                <a href="/backups" class="{{if eq .Page "backups"}}active{{end}}">Backups</a>
-                <a href="/notifications" class="{{if eq .Page "notifications"}}active{{end}}">Notifications</a>
+                <a href="/" class="{{if eq .Page "index"}}active{{end}}">Маршруты</a>
+                <a href="/stats" class="{{if eq .Page "stats"}}active{{end}}">Обзор</a>
+                <a href="/backups" class="{{if eq .Page "backups"}}active{{end}}">Копии</a>
+                <a href="/notifications" class="{{if eq .Page "notifications"}}active{{end}}">Уведомления</a>
                 <a href="/settings" class="{{if eq .Page "settings"}}active{{end}}">GPT</a>
             </div>
         </div>

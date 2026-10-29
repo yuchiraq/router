@@ -14,12 +14,12 @@
         <div class="list-column-head" aria-hidden="true"><span>Домен / адрес сервиса</span><span>Обслуживание</span></div>
         <ul class="rule-list">
             {{range .Rules}}
-            <li class="rule-item">
+            <li class="rule-item" data-panel="{{index $.PanelHosts .Host}}">
                 <div class="rule-info"><span class="domain">{{.Host}}</span><span class="target">{{.Target}}</span><span class="route-state {{if .Maintenance}}is-paused{{end}}">{{if .Maintenance}}Обслуживание{{else}}Маршрут включён{{end}}</span></div>
                 <div class="rule-actions">
                     <form action="/rule/maintenance" method="post" data-route-form>
                         <input type="hidden" name="host" value="{{.Host}}">
-                        <label class="switch"><input type="checkbox" role="switch" name="maintenance" title="Обслуживание {{.Host}}" aria-label="Обслуживание {{.Host}}" {{if .Maintenance}}checked{{end}}><span class="slider"></span></label>
+                        <label class="switch"><input type="checkbox" role="switch" name="maintenance" title="{{if index $.PanelHosts .Host}}Панель управления остаётся доступной{{else}}Обслуживание {{.Host}}{{end}}" aria-label="Обслуживание {{.Host}}" {{if .Maintenance}}checked{{end}} {{if index $.PanelHosts .Host}}disabled{{end}}><span class="slider"></span></label>
                     </form>
                     <form action="/remove" method="post" data-route-form><input type="hidden" name="host" value="{{.Host}}"><button type="submit" class="btn btn-icon btn-danger" title="Удалить {{.Host}}" aria-label="Удалить {{.Host}}"><span class="icon" style="--icon:url(/static/icons/trash-2.svg)" aria-hidden="true"></span></button></form>
                 </div>

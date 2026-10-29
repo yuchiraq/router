@@ -8,6 +8,7 @@ import (
 	"router/internal/clog"
 	"strconv"
 	"strings"
+	"time"
 
 	"router/internal/gpt"
 	"router/internal/logstream"
@@ -53,6 +54,21 @@ type Handler struct {
 	gptStore    *storage.GPTStore
 	gptClient   *gpt.Client
 	notifier    *notify.TelegramNotifier
+	diskMonitor *notify.DiskMonitor
+}
+
+func (h *Handler) SetDiskMonitor(m *notify.DiskMonitor) { h.diskMonitor = m }
+
+func (h *Handler) notificationData() map[string]interface{} {
+	data := map[string]interface{}{"config": h.notifyStore.Get()}
+	if h.diskMonitor != nil {
+		data["monitor"] = h.diskMonitor.Status(time.Now())
+	}
+	if h.stats != nil {
+		data["disks"] = h.stats.GetDiskData()
+		data["unavailable"] = h.stats.UnavailableDisks()
+	}
+	return data
 }
 
 // NewHandler creates a new panel handler
@@ -137,14 +153,27 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			maintenance := r.FormValue("maintenance") == "on"
-			h.store.SetMaintenanceMode(maintenance)
+			if err := h.store.SetMaintenanceMode(maintenance); err != nil {
+				http.Error(w, "Не удалось сохранить режим обслуживания. Изменения не применены.", http.StatusInternalServerError)
+				return
+			}
+			if strings.Contains(r.Header.Get("Accept"), "application/json") {
+				writeJSON(w, map[string]interface{}{"maintenance": maintenance})
+				return
+			}
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
 
+		rules := h.store.All()
+		panelHosts := map[string]bool{}
+		for _, rule := range rules {
+			panelHosts[rule.Host] = h.store.IsPanelTarget(rule.Target)
+		}
 		data := map[string]interface{}{
-			"Rules":           h.store.All(),
-			"MaintenanceMode": h.store.MaintenanceMode,
+			"Rules":           rules,
+			"PanelHosts":      panelHosts,
+			"MaintenanceMode": h.store.IsMaintenanceMode(),
 		}
 		h.render(w, r, "index", data)
 	}).ServeHTTP(w, r)
@@ -177,13 +206,20 @@ func (h *Handler) AddRule(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		host := r.FormValue("host")
-		target := r.FormValue("target")
+		host := strings.ToLower(strings.TrimSpace(r.FormValue("host")))
+		target := strings.TrimSpace(r.FormValue("target"))
 		if host == "" || target == "" {
-			http.Error(w, "Host and target are required", http.StatusBadRequest)
+			http.Error(w, "Укажите домен и адрес сервиса", http.StatusBadRequest)
 			return
 		}
-		h.store.Add(host, target)
+		if _, exists := h.store.GetRule(host); exists {
+			http.Error(w, "Маршрут с таким доменом уже существует", http.StatusConflict)
+			return
+		}
+		if err := h.store.Add(host, target); err != nil {
+			http.Error(w, "Не удалось сохранить маршрут на диск", http.StatusInternalServerError)
+			return
+		}
 		http.Redirect(w, r, "/", http.StatusFound)
 	}).ServeHTTP(w, r)
 }
@@ -200,7 +236,10 @@ func (h *Handler) RemoveRule(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Host is required", http.StatusBadRequest)
 			return
 		}
-		h.store.Remove(host)
+		if err := h.store.Remove(host); err != nil {
+			http.Error(w, "Не удалось удалить маршрут. Проверьте доступ к файлу правил", http.StatusInternalServerError)
+			return
+		}
 		http.Redirect(w, r, "/", http.StatusFound)
 	}).ServeHTTP(w, r)
 }
@@ -218,7 +257,14 @@ func (h *Handler) RuleMaintenance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		maintenance := r.FormValue("maintenance") == "on"
-		h.store.SetRuleMaintenance(host, maintenance)
+		if err := h.store.SetRuleMaintenance(host, maintenance); err != nil {
+			http.Error(w, "Не удалось изменить обслуживание. Проверьте маршрут, доступ к файлу правил и что это не адрес панели управления.", http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			writeJSON(w, map[string]interface{}{"maintenance": maintenance})
+			return
+		}
 		http.Redirect(w, r, "/", http.StatusFound)
 	}).ServeHTTP(w, r)
 }
@@ -580,8 +626,7 @@ func (h *Handler) NotificationsData(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "notification storage is disabled", http.StatusServiceUnavailable)
 			return
 		}
-		cfg := h.notifyStore.Get()
-		writeJSON(w, map[string]interface{}{"config": cfg})
+		writeJSON(w, h.notificationData())
 	}).ServeHTTP(w, r)
 }
 
@@ -639,9 +684,19 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 				continue
 			}
 			id, err := strconv.ParseInt(part, 10, 64)
-			if err == nil {
-				chatIDs = append(chatIDs, id)
+			if err != nil || id == 0 {
+				http.Error(w, "ID чатов должны быть ненулевыми целыми числами через запятую", http.StatusBadRequest)
+				return
 			}
+			chatIDs = append(chatIDs, id)
+		}
+		if quietStart < 0 || quietStart > 23 || quietEnd < 0 || quietEnd > 23 {
+			http.Error(w, "Часы должны быть от 0 до 23", http.StatusBadRequest)
+			return
+		}
+		if r.FormValue("enabled") == "on" && (strings.TrimSpace(r.FormValue("token")) == "" || len(chatIDs)+len(previous.KnownChatIDs) == 0) {
+			http.Error(w, "Для отправки уведомлений укажите токен бота и получателя", http.StatusBadRequest)
+			return
 		}
 		secret := strings.TrimSpace(r.FormValue("webhookSecret"))
 		if secret == "" {
@@ -697,7 +752,9 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		writeJSON(w, map[string]interface{}{"config": h.notifyStore.Get(), "warning": webhookWarning})
+		data := h.notificationData()
+		data["warning"] = webhookWarning
+		writeJSON(w, data)
 	}).ServeHTTP(w, r)
 }
 
@@ -712,7 +769,13 @@ func (h *Handler) TestNotification(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "notifier is disabled", http.StatusServiceUnavailable)
 			return
 		}
-		if err := h.notifier.TestMessage(); err != nil {
+		var err error
+		if r.FormValue("kind") == "disk" && h.stats != nil {
+			err = h.notifier.TestDiskMessage(h.stats.LatestDisks())
+		} else {
+			err = h.notifier.TestMessage()
+		}
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

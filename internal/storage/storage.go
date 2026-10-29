@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -62,5 +63,21 @@ func (s *Storage) Save(rules map[string]*Rule, maintenanceMode bool) error {
 		return err
 	}
 
-	return os.WriteFile(s.filePath, data, 0644)
+	f, err := os.CreateTemp(filepath.Dir(s.filePath), ".rules-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), s.filePath)
 }

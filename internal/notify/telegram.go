@@ -80,12 +80,12 @@ func (n *TelegramNotifier) TestMessage() error {
 	cfg := n.store.Get()
 	chatIDs := targetChatIDs(cfg)
 	if cfg.Token == "" || len(chatIDs) == 0 {
-		return fmt.Errorf("token and chat ids are required")
+		return fmt.Errorf("Укажите токен бота и хотя бы одного получателя")
 	}
 	for _, chatID := range chatIDs {
 		values := url.Values{}
 		values.Set("chat_id", fmt.Sprintf("%d", chatID))
-		values.Set("text", "✅ Router test notification")
+		values.Set("text", "Router: тестовое уведомление. Соединение с Telegram работает.")
 		if err := n.callBot(cfg.Token, "sendMessage", values); err != nil {
 			return err
 		}
@@ -180,7 +180,7 @@ func (n *TelegramNotifier) callBot(token, method string, values url.Values) erro
 	resp, err := n.client.PostForm(apiURL, values)
 	if err != nil {
 		// url.Error includes the bot token in its URL. Never return or log it.
-		return fmt.Errorf("telegram %s: network request failed", method)
+		return fmt.Errorf("Не удалось связаться с Telegram. Проверьте интернет-соединение сервера")
 	}
 	defer resp.Body.Close()
 	var result struct {
@@ -188,10 +188,20 @@ func (n *TelegramNotifier) callBot(token, method string, values url.Values) erro
 		ErrorCode int  `json:"error_code"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
-		return fmt.Errorf("telegram %s: invalid response (HTTP %d)", method, resp.StatusCode)
+		return fmt.Errorf("Некорректный ответ Telegram (HTTP %d)", resp.StatusCode)
 	}
 	if resp.StatusCode >= 300 || !result.OK {
-		return fmt.Errorf("telegram %s: HTTP %d, API error %d", method, resp.StatusCode, result.ErrorCode)
+		switch result.ErrorCode {
+		case 401, 404:
+			return fmt.Errorf("Telegram отклонил токен бота. Проверьте токен")
+		case 400:
+			return fmt.Errorf("Telegram отклонил запрос. Проверьте ID чата и отправьте боту /start")
+		case 403:
+			return fmt.Errorf("Бот заблокирован или не имеет доступа к чату")
+		case 429:
+			return fmt.Errorf("Лимит запросов Telegram. Повторите позже")
+		}
+		return fmt.Errorf("Ошибка Telegram: HTTP %d, код %d", resp.StatusCode, result.ErrorCode)
 	}
 	clog.Infof("telegram callBot: method=%s status=%s", method, resp.Status)
 	return nil

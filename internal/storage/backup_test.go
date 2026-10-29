@@ -7,6 +7,12 @@ import (
 	"testing"
 )
 
+func TestArchiveNameIsPortable(t *testing.T) {
+	if got := sanitizeName("Документы <пример>: test?"); got != "Документы--пример---test-" {
+		t.Fatal(got)
+	}
+}
+
 func TestBackupStoreRunNowAndRetentionPerJob(t *testing.T) {
 	dir := t.TempDir()
 	srcDir := filepath.Join(dir, "src")

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Backups - Router</title>
+    <title>Резервные копии · Router</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/panel.js" defer></script>
 </head>
@@ -12,22 +12,22 @@
         <div class="nav-container">
             <a href="/account" class="nav-logo">Router</a>
             <div class="nav-links">
-                <a href="/">Home</a>
-                <a href="/stats">Stats</a>
-                <a href="/backups" class="active">Backups</a>
-                <a href="/notifications">Notifications</a>
+                <a href="/">Маршруты</a>
+                <a href="/stats">Обзор</a>
+                <a href="/backups" class="active">Копии</a>
+                <a href="/notifications">Уведомления</a>
                 <a href="/settings">GPT</a>
             </div>
         </div>
     </nav>
     <main class="container">
-        <div class="header"><h1>Backups</h1></div>
+        <div class="header"><h1>Резервные копии</h1><button class="btn" id="new-job-btn" type="button"><span class="icon" style="--icon:url(/static/icons/plus.svg)" aria-hidden="true"></span>Добавить задание</button></div>
+        <p id="status-msg" class="status-line" role="status" aria-live="polite"></p>
 
         <div class="card">
             <div class="card-header">Задания</div>
             <div class="card-body">
                 <div id="jobs-table" class="disk-table" style="margin-bottom:12px;"></div>
-                <button class="btn" id="new-job-btn" type="button">Добавить задание</button>
             </div>
         </div>
 
@@ -48,13 +48,13 @@
                     <button class="btn btn-secondary" id="run-btn" type="button">Создать копию сейчас</button>
                     <button class="btn btn-danger" id="delete-btn" type="button">Удалить задание</button>
                 </div>
-                <p id="status-msg" style="margin-top:12px;color:var(--text-secondary);"></p>
             </div>
         </div>
 
         <div class="card">
             <div class="card-header">Архивы</div>
             <div class="card-body">
+                <details id="backup-error" hidden><summary>Ошибка последнего копирования</summary><p id="backup-error-detail" class="diagnostic-text"></p></details>
                 <div class="disk-table" id="backups-table"></div>
             </div>
         </div>
@@ -62,6 +62,7 @@
         <script>
             (function () {
                 var state = { jobs: [], entries: [], selectedId: '' };
+                function escapeHTML(value) { var span=document.createElement('span'); span.textContent=String(value || ''); return span.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
                 function setStatus(text, isError) {
                     var el = document.getElementById('status-msg');
@@ -111,10 +112,10 @@
                         var j = state.jobs[i];
                         rows += '<div class="disk-row">' +
                             '<div class="disk-main">' +
-                                '<div class="disk-title">' + (j.name || j.id) + '</div>' +
-                                '<div class="disk-subtitle">' + (j.enabled ? 'enabled' : 'disabled') + ' • every ' + (j.intervalMinutes || 60) + ' min • keep ' + (j.keepCopies || 10) + '</div>' +
+                                '<div class="disk-title">' + escapeHTML(j.name || j.id) + '</div>' +
+                                '<div class="disk-subtitle">' + (j.enabled ? 'По расписанию' : 'Приостановлено') + ' · каждые ' + Number(j.intervalMinutes || 60) + ' мин · хранить: ' + Number(j.keepCopies || 10) + '</div>' +
                             '</div>' +
-                            '<div><button class="btn" data-select-id="' + j.id + '">Изменить</button></div>' +
+                            '<div><button class="btn btn-secondary" data-select-id="' + escapeHTML(j.id) + '">Изменить</button></div>' +
                         '</div>';
                     }
                     table.innerHTML = rows || '<div class="disk-empty">Заданий пока нет</div>';
@@ -140,8 +141,8 @@
                     for (var i = 0; i < state.entries.length; i++) {
                         var e = state.entries[i];
                         rows += '<div class="disk-row">' +
-                            '<div class="disk-main"><div class="disk-title">' + e.jobName + '</div><div class="disk-subtitle">' + e.path + '</div></div>' +
-                            '<div class="disk-metrics"><div>' + new Date(e.createdAt).toLocaleString() + '</div><div>' + (e.sizeBytes / 1024 / 1024).toFixed(2) + ' MB</div></div>' +
+                            '<div class="disk-main"><div class="disk-title">' + escapeHTML(e.jobName) + '</div><div class="disk-subtitle">' + escapeHTML(e.path) + '</div></div>' +
+                            '<div class="disk-metrics"><div>' + new Date(e.createdAt).toLocaleString('ru-RU') + '</div><div>' + (e.sizeBytes / 1024 / 1024).toFixed(2) + ' МиБ</div></div>' +
                         '</div>';
                     }
                     table.innerHTML = rows || '<div class="disk-empty">Архивов пока нет</div>';
@@ -150,7 +151,7 @@
                 function fetchData() {
                     return fetch('/backups/data', { credentials: 'same-origin' })
                         .then(function (response) {
-                            if (!response.ok) throw new Error('failed to load backup data');
+                            if (!response.ok) throw new Error('Не удалось загрузить резервные копии');
                             return response.json();
                         })
                         .then(function (data) {
@@ -158,11 +159,10 @@
                             state.entries = data.entries || [];
                             renderJobs();
                             renderEntries();
-                            if (data.lastError) {
-                                setStatus('Последняя ошибка: ' + data.lastError, true);
-                            }
+                            document.getElementById('backup-error').hidden = !data.lastError;
+                            document.getElementById('backup-error-detail').textContent = data.lastError || '';
                         })
-                        .catch(function (err) { setStatus(err.message || String(err), true); });
+                        .catch(function (err) { setStatus(window.RouterUI.errorMessage(err), true); });
                 }
 
                 function saveJob() {
@@ -202,7 +202,7 @@
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: body.toString()
                     }).then(function (response) {
-                        if (!response.ok) return response.text().then(function (t) { throw new Error(t || 'backup failed'); });
+                        if (!response.ok) throw new Error('Не удалось создать копию. Проверьте пути и свободное место.');
                         setStatus('Резервная копия создана', false);
                     });
                 }
@@ -232,7 +232,7 @@
                 function perform(action, button, label) {
                     var buttons = ['save-btn','run-btn','delete-btn'].map(id=>document.getElementById(id));
                     var previous = button.textContent; buttons.forEach(el=>el.disabled=true); button.textContent=label;
-                    return Promise.resolve().then(action).then(fetchData).catch(function(e){setStatus(e.message,true);window.RouterUI.announce(e.message,true);}).finally(function(){buttons.forEach(el=>el.disabled=false);button.textContent=previous;});
+                    return Promise.resolve().then(action).then(fetchData).catch(function(e){setStatus(window.RouterUI.errorMessage(e),true);window.RouterUI.announce(window.RouterUI.errorMessage(e),true);}).finally(function(){buttons.forEach(el=>el.disabled=false);button.textContent=previous;});
                 }
                 document.getElementById('save-btn').addEventListener('click', function () {
                     for (var input of document.querySelectorAll('#settings-card input:not([type="hidden"]),#settings-card textarea')) { if (!input.reportValidity()) return; }

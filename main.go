@@ -48,6 +48,7 @@ func main() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
+			stats.RecordDisks(notifyStore.Get().DiskPaths...)
 			diskMonitor.Check(time.Now(), stats.LatestDisks())
 			<-ticker.C
 		}
@@ -66,7 +67,6 @@ func main() {
 		for {
 			stats.RecordMemory()
 			stats.RecordCPU()
-			stats.RecordDisks(notifyStore.Get().DiskPaths...)
 			stats.RecordSSHConnections()
 			time.Sleep(5 * time.Second)
 		}
@@ -88,11 +88,13 @@ func main() {
 		panelAddr = "127.0.0.1:8162"
 	}
 	adminStore := storage.NewAdminStore("admin.json", adminUser, adminPass)
+	store.SetPanelAddress(panelAddr)
 
 	// --- Admin Panel ---
 	go func() {
 		panelMux := http.NewServeMux()
 		panelHandler := panel.NewHandler(store, adminStore, stats, broadcaster, ipReputation, backupStore, notifyStore, gptStore, gptClient, notifier)
+		panelHandler.SetDiskMonitor(diskMonitor)
 
 		// Serve static files
 		staticFS := http.FileServer(http.Dir("internal/panel/static"))

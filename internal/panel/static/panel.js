@@ -41,7 +41,8 @@
             confirmDialog.addEventListener('close',() => resolve(confirmDialog.returnValue === 'accept'),{once:true});
         });
     }
-    window.RouterUI = {announce, confirm:confirmAction};
+    const errorMessage = error => error instanceof TypeError ? 'Нет связи с сервером. Проверьте подключение и повторите попытку.' : error instanceof SyntaxError ? 'Не удалось прочитать ответ сервера. Обновите страницу.' : error.message || 'Не удалось выполнить действие';
+    window.RouterUI = {announce, confirm:confirmAction, errorMessage};
     const nav = document.querySelector('.nav-container');
     if (nav) {
         const logo = nav.querySelector('.nav-logo'); logo.prepend(icon('network')); logo.href = '/';
@@ -64,6 +65,8 @@
         more.append(icon('ellipsis'),document.createTextNode('Ещё'));
         if (['/backups','/settings','/account'].includes(location.pathname)) more.classList.add('active');
         more.onclick = () => moreDialog.showModal(); links.append(more);
+        const measureNavigation = () => root.style.setProperty('--bottom-nav-height',`${links.getBoundingClientRect().height}px`);
+        new ResizeObserver(measureNavigation).observe(links);
         const footer = document.createElement('div'); footer.className = 'nav-footer';
         const themeLabel = document.createElement('label'); themeLabel.className = 'appearance';
         themeLabel.append(icon('sun-moon'));
@@ -78,11 +81,32 @@
     if (title && titles[location.pathname]) { title.textContent = titles[location.pathname]; document.title = `${title.textContent} · Router`; }
     root.lang = 'ru';
     document.querySelectorAll('#status,#status-msg').forEach(el => { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); });
+    document.querySelectorAll('.dashboard-widget').forEach(widget => {
+        const title = widget.querySelector('.card-header span:last-child').textContent;
+        const body = widget.querySelector('.card-body'); body.tabIndex = 0; body.setAttribute('role','region'); body.setAttribute('aria-label',title);
+        const canvas = body.querySelector('canvas');
+        if (canvas) { canvas.setAttribute('role','img'); canvas.setAttribute('aria-label',title); }
+    });
     document.querySelectorAll('input.form-control,textarea.form-control').forEach(el => {
         if (!el.labels?.length && !el.hasAttribute('aria-label')) el.setAttribute('aria-label', el.title || el.placeholder || el.name || el.id);
     });
     document.querySelectorAll('[data-open-dialog]').forEach(button => button.addEventListener('click',() => document.getElementById(button.dataset.openDialog).showModal()));
     document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click',() => button.closest('dialog').close()));
+    function renderMaintenance() {
+        const global = document.querySelector('.maintenance-form input').checked;
+        const symbol = document.querySelector('.status-symbol');
+        symbol.classList.toggle('warning',global);
+        symbol.replaceChildren(icon(global ? 'triangle-alert' : 'circle-check'));
+        document.querySelector('.status-copy strong').textContent = global ? 'Сайты на обслуживании' : 'Маршрутизация включена';
+        document.querySelectorAll('.rule-item').forEach(row => {
+            const panel = row.dataset.panel === 'true';
+            const own = row.querySelector('input[name="maintenance"]').checked;
+            const state = row.querySelector('.route-state');
+            state.textContent = panel ? 'Панель управления' : global ? 'Общее обслуживание' : own ? 'Обслуживание' : 'Маршрут включён';
+            state.classList.toggle('is-paused',!panel && (global || own));
+        });
+    }
+    if (document.querySelector('.maintenance-form')) renderMaintenance();
     document.querySelectorAll('form[data-route-form]').forEach(form => {
         let pending = false;
         async function submit() {
@@ -92,14 +116,24 @@
             const controls = [...form.querySelectorAll('button,input')];
             controls.forEach(el => el.disabled = true); form.setAttribute('aria-busy','true');
             try {
-                const response = await fetch(form.action,{method:'POST',body,credentials:'same-origin'});
+                const toggle = form.querySelector('input[name="maintenance"]');
+                const response = await fetch(form.action,{method:'POST',body,credentials:'same-origin',headers:{Accept:toggle ? 'application/json' : 'text/html'}});
+                if (response.status === 401) throw new Error('Сессия завершена. Обновите страницу и войдите снова.');
                 if (!response.ok) throw new Error((await response.text()).trim() || 'Не удалось сохранить изменения');
+                if (toggle) {
+                    const data = await response.json();
+                    toggle.checked = toggle.defaultChecked = data.maintenance;
+                    controls.forEach(el => el.disabled = false); form.removeAttribute('aria-busy'); pending = false;
+                    renderMaintenance();
+                    announce(data.maintenance ? 'Режим обслуживания включён' : 'Режим обслуживания выключен');
+                    return;
+                }
                 location.assign(response.url || '/');
             } catch (error) {
                 const toggle = form.querySelector('input[name="maintenance"]'); if (toggle) toggle.checked = toggle.defaultChecked;
                 controls.forEach(el => el.disabled = false); form.removeAttribute('aria-busy'); pending = false;
                 const message = form.querySelector('[data-form-error]');
-                if (message) { message.textContent = error.message; message.hidden = false; } else announce(error.message,true);
+                if (message) { message.textContent = errorMessage(error); message.hidden = false; } else announce(errorMessage(error),true);
             }
         }
         form.addEventListener('submit',async event => {
@@ -109,11 +143,14 @@
         });
         const toggle = form.querySelector('input[name="maintenance"]');
         if (toggle) toggle.addEventListener('change',async () => {
+            if (pending) return;
             const enable = toggle.checked;
             if (enable) {
-                toggle.checked = false;
+                toggle.checked = false; toggle.disabled = true;
                 const global = form.getAttribute('action') === '/';
-                if (!await confirmAction('Включить обслуживание?',global ? 'Все сайты временно покажут страницу обслуживания.' : `${form.elements.host.value} временно покажет страницу обслуживания.`,'Включить')) return;
+                const confirmed = await confirmAction('Включить обслуживание?',global ? 'Все сайты, кроме панели управления, временно покажут страницу обслуживания.' : `${form.elements.host.value} временно покажет страницу обслуживания.`,'Включить');
+                toggle.disabled = false;
+                if (!confirmed) return;
                 toggle.checked = true;
             }
             submit();

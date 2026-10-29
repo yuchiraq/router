@@ -39,7 +39,7 @@ func TestNotificationDiskSettings(t *testing.T) {
 	if cfg.DiskWarning != 80 || cfg.DiskCritical != 92 || cfg.DiskReminderHours != 12 || len(cfg.DiskPaths) != 1 || len(cfg.KnownChatIDs) != 1 || !cfg.Events["disk_usage"] {
 		t.Fatal("incorrect saved config")
 	}
-	for _, pair := range [][2]string{{"diskWarning", "100"}, {"diskCritical", "79"}, {"diskReminderHours", "0"}, {"diskPaths", "relative/path"}, {"diskWarning", "not-a-number"}} {
+	for _, pair := range [][2]string{{"diskWarning", "100"}, {"diskCritical", "79"}, {"diskReminderHours", "0"}, {"diskPaths", "relative/path"}, {"diskWarning", "not-a-number"}, {"chatIds", "abc"}, {"chatIds", "0"}, {"enabled", "on"}, {"quietStart", "24"}} {
 		previous := values.Get(pair[0])
 		values.Set(pair[0], pair[1])
 		if w := post(values, true); w.Code != 400 {

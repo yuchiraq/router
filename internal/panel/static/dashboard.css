@@ -1,6 +1,6 @@
 .dashboard-canvas { border:0; border-radius:0; }
 .dashboard-canvas:not(.free-layout) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; min-height:0!important; }
-.dashboard-widget { border:1px solid var(--border-color); border-radius:8px; background:var(--surface-color); overflow:hidden; }
+.dashboard-widget { border:1px solid var(--border-color); border-radius:8px; background:var(--widget-fill,var(--surface-color)); overflow:hidden; }
 .dashboard-widget .card-header { padding:16px 18px; border-bottom:1px solid var(--border-color); font-size:14px; }
 .dashboard-widget .card-body { padding:16px 18px; }
 .dashboard-canvas:not(.free-layout) .dashboard-widget { position:static; width:auto!important; height:340px!important; min-width:0; z-index:auto!important; }

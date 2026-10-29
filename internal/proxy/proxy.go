@@ -52,7 +52,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if p.store.MaintenanceMode {
+	rule, ok := p.store.GetRule(r.Host)
+	panelRoute := ok && p.store.IsPanelTarget(rule.Target)
+	if p.store.IsMaintenanceMode() && !panelRoute {
 		clog.Infof("[maintenance-global] %s %s host=%s", r.Method, r.URL.Path, r.Host)
 		if serveMaintenanceStatic(w, r) {
 			return
@@ -63,7 +65,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rule, ok := p.store.GetRule(r.Host)
 	if !ok {
 		clog.Warnf("[no-rule] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, r.RemoteAddr)
 		if p.reputation != nil {
@@ -89,7 +90,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if rule.Maintenance {
+	if rule.Maintenance && !panelRoute {
 		clog.Infof("[maintenance-rule] %s %s host=%s", r.Method, r.URL.Path, r.Host)
 		if serveMaintenanceStatic(w, r) {
 			return
@@ -103,7 +104,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Add request to stats with the specific host
 	p.stats.AddRequest(r.Host, stats.CountryFromRequest(r))
 
-	targetURL, err := url.Parse("http://" + rule.Target)
+	target := rule.Target
+	if !strings.Contains(target, "://") {
+		target = "http://" + target
+	}
+	targetURL, err := url.Parse(target)
 	if err != nil {
 		clog.Errorf("Error parsing target URL for host %s: %v", r.Host, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

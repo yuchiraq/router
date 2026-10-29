@@ -11,6 +11,10 @@
 <nav class="nav"><div class="nav-container"><a href="/" class="nav-logo">Router</a><div class="nav-links"><a href="/">Маршруты</a><a href="/stats">Обзор</a><a href="/notifications" class="active">Уведомления</a></div></div></nav>
 <main class="container">
     <header class="header"><h1>Уведомления</h1><a href="/stats" class="btn btn-secondary">Обзор сервера</a></header>
+    <section class="monitor-summary" aria-label="Состояние уведомлений">
+        <span class="status-symbol"><span class="icon" style="--icon:url(/static/icons/bell.svg)" aria-hidden="true"></span></span>
+        <div><strong id="monitor-state">Проверка состояния…</strong><p class="muted" id="monitor-detail"></p><p id="monitor-error" class="form-error" hidden></p></div>
+    </section>
     <form id="notification-form">
         <fieldset id="notification-fields" disabled style="border:0;padding:0;margin:0;min-width:0;">
         <section class="settings-section">
@@ -32,6 +36,8 @@
                     <label class="field">Напоминать через, ч<input class="form-control" id="diskReminderHours" type="number" min="1" max="168" value="6" required></label>
                 </div>
                 <label class="field">Дополнительные пути<textarea class="form-control" id="diskPaths" aria-label="Дополнительные пути" aria-describedby="disk-path-help" rows="3" placeholder="/mnt/backup&#10;/home/yc_162/work_projects"></textarea><small id="disk-path-help">По одному абсолютному пути на строку. По умолчанию: / и разделы в /media. Проверяется свободное место на разделе, не размер папки.</small></label>
+                <div id="monitored-disks" class="monitored-disks" aria-label="Проверяемые диски"></div>
+                <button class="btn btn-secondary" type="button" id="disk-test-btn" disabled><span class="icon" style="--icon:url(/static/icons/bell.svg)" aria-hidden="true"></span>Тест заполнения в Telegram</button>
             </div>
         </section>
         <section class="settings-section">
@@ -50,11 +56,12 @@
             </div>
         </section>
         <section class="settings-section">
-            <div><h2>Тихие часы</h2><p class="section-detail">По часовому поясу сервера</p></div>
+            <div><h2>Тихие часы</h2><p class="section-detail" id="server-timezone">По часовому поясу сервера</p></div>
             <div class="form-grid">
                 <label class="check-row full"><input type="checkbox" id="quietEnabled">Приостанавливать уведомления ночью</label>
                 <label class="field">С какого часа<input class="form-control" id="quietStart" type="number" min="0" max="23" value="20" required></label>
                 <label class="field">До какого часа<input class="form-control" id="quietEnd" type="number" min="0" max="23" value="8" required></label>
+                <p id="quiet-summary" class="section-detail full"></p>
             </div>
         </section>
         <details><summary>Входящие команды бота</summary>
