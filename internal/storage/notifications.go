@@ -122,6 +122,9 @@ func normalizeNotificationConfig(cfg *NotificationConfig) {
 		cfg.Events = map[string]bool{}
 	}
 	cfg.Events = copyEvents(cfg.Events)
+	if _, exists := cfg.Events["service_unavailable"]; !exists {
+		cfg.Events["service_unavailable"] = true
+	}
 	if cfg.QuietHoursStart < 0 || cfg.QuietHoursStart > 23 {
 		cfg.QuietHoursStart = 20
 	}

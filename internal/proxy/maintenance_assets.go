@@ -8,6 +8,7 @@ var maintenanceAssets = map[string]string{
 	"game_manager.js": "vendor/2048/game_manager.js", "grid.js": "vendor/2048/grid.js", "tile.js": "vendor/2048/tile.js",
 	"game.js": "maintenance-game.js", "license.txt": "vendor/2048/LICENSE.txt",
 	"network.svg": "icons/network.svg", "rotate-ccw.svg": "icons/rotate-ccw.svg",
+	"qoncept.svg":  "icons/qoncept.svg",
 	"arrow-up.svg": "icons/arrow-up.svg", "arrow-down.svg": "icons/arrow-down.svg",
 	"arrow-left.svg": "icons/arrow-left.svg", "arrow-right.svg": "icons/arrow-right.svg",
 	"sun-moon.svg": "icons/sun-moon.svg", "play.svg": "icons/play.svg",

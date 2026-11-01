@@ -683,7 +683,7 @@ func (h *Handler) SaveNotificationsConfig(w http.ResponseWriter, r *http.Request
 			return
 		}
 		events := map[string]bool{}
-		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "auto_ban", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test", "disk_usage"} {
+		for _, k := range []string{"unknown_host", "suspicious_probe", "blocked_ip_hit", "auto_ban", "manual_ban", "manual_unban", "manual_remove", "backup_success", "backup_failure", "test", "disk_usage", "service_unavailable"} {
 			events[k] = r.FormValue("event_"+k) == "on"
 		}
 		quietStart, _ := strconv.Atoi(r.FormValue("quietStart"))

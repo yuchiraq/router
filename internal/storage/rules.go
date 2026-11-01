@@ -13,28 +13,29 @@ import (
 
 // Rule represents a routing rule with its status and last access time
 type Rule struct {
-	Host            string    `json:"-"` // Host is the map key, not stored in the struct's JSON
-	Target          string    `json:"target"`
-	Maintenance     bool      `json:"maintenance"`
-	LastAccess      time.Time `json:"-"`
-	ServiceDown     bool      `json:"-"`
-	HealthCheckedAt time.Time `json:"-"`
-	HealthError     string    `json:"-"`
-	healthFailures  int
-	healthSuccesses int
-	healthRevision  uint64
+	Host             string    `json:"-"` // Host is the map key, not stored in the struct's JSON
+	Target           string    `json:"target"`
+	Maintenance      bool      `json:"maintenance"`
+	LastAccess       time.Time `json:"-"`
+	ServiceDown      bool      `json:"-"`
+	HealthCheckedAt  time.Time `json:"-"`
+	HealthError      string    `json:"-"`
+	healthFailures   int
+	healthSuccesses  int
+	healthRevision   uint64
 	healthGeneration uint64
 }
 
 // RuleStore manages the routing rules
 type RuleStore struct {
-	mu              sync.RWMutex
-	rules           map[string]*Rule
-	storage         *Storage
-	MaintenanceMode bool `json:"maintenanceMode"`
-	panelAddress    string
-	healthMu        sync.Mutex
+	mu               sync.RWMutex
+	rules            map[string]*Rule
+	storage          *Storage
+	MaintenanceMode  bool `json:"maintenanceMode"`
+	panelAddress     string
+	healthMu         sync.Mutex
 	healthGeneration uint64
+	onServiceDown    func(ServiceOutage)
 }
 
 // NewRuleStore creates a new RuleStore
@@ -175,6 +176,10 @@ func (s *RuleStore) IsPanelTarget(target string) bool {
 	s.mu.RLock()
 	address := s.panelAddress
 	s.mu.RUnlock()
+	return isPanelTarget(target, address)
+}
+
+func isPanelTarget(target, address string) bool {
 	if address == "" {
 		return false
 	}

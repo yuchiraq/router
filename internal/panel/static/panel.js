@@ -45,7 +45,11 @@
     window.RouterUI = {announce, confirm:confirmAction, errorMessage};
     const nav = document.querySelector('.nav-container');
     if (nav) {
-        const logo = nav.querySelector('.nav-logo'); logo.prepend(icon('network')); logo.href = '/';
+        const logo = nav.querySelector('.nav-logo');
+        const brand = document.createElement('span'); brand.className = 'brand-lockup';
+        const product = document.createElement('strong'); product.textContent = 'Router';
+        const author = document.createElement('small'); author.textContent = 'by Qoncept';
+        brand.append(product,author); logo.replaceChildren(icon('qoncept'),brand); logo.href = '/';
         const links = nav.querySelector('.nav-links'); links.replaceChildren();
         const entries = [['/','Маршруты','route'],['/stats','Обзор','layout-dashboard'],['/backups','Копии','archive'],['/notifications','Уведомления','bell'],['/settings','GPT','settings-2'],['/account','Аккаунт','user-round']];
         function navLink([href,name,symbol]) {
@@ -78,7 +82,7 @@
     }
     const title = document.querySelector('h1');
     const titles = {'/':'Маршруты','/stats':'Обзор сервера','/backups':'Резервные копии','/notifications':'Уведомления','/account':'Аккаунт'};
-    if (title && titles[location.pathname]) { title.textContent = titles[location.pathname]; document.title = `${title.textContent} · Router`; }
+    if (title && titles[location.pathname]) { title.textContent = titles[location.pathname]; document.title = `${title.textContent} · Router by Qoncept`; }
     root.lang = 'ru';
     document.querySelectorAll('#status,#status-msg').forEach(el => { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); });
     document.querySelectorAll('.dashboard-widget').forEach(widget => {

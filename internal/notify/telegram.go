@@ -37,6 +37,12 @@ func (n *TelegramNotifier) Notify(eventKey, dedupeKey, message string) {
 	n.notifyInternal(eventKey, dedupeKey, message, "")
 }
 
+func (n *TelegramNotifier) NotifyServiceUnavailable(event storage.ServiceOutage) {
+	message := fmt.Sprintf("Router by Qoncept\nСайт недоступен: %s\nАвтоматически включён сервисный режим.\nПричина: %s\nВремя: %s\nПосле восстановления сервисный режим отключится автоматически.", event.Host, event.Reason, event.At.Format("02.01.2006 15:04:05 MST"))
+	// The store emits exactly one event per outage, including a new outage after recovery.
+	n.Notify("service_unavailable", "", message)
+}
+
 func (n *TelegramNotifier) NotifyWithBanButton(eventKey, dedupeKey, message, ip string) {
 	n.notifyInternal(eventKey, dedupeKey, message, ip)
 }

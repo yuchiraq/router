@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <meta name="robots" content="noindex,nofollow"><title>Временная пауза</title>
+    <meta name="robots" content="noindex,nofollow"><title>Временная пауза · Router by Qoncept</title>
     <link rel="stylesheet" href="/_router/maintenance/assets/maintenance.css">
     <script src="/_router/maintenance/assets/maintenance.js" defer></script>
     <script src="/_router/maintenance/assets/grid.js" defer></script>
@@ -12,10 +12,10 @@
 </head>
 <body data-preview="{{if .Preview}}true{{else}}false{{end}}">
     <div class="ambient-grid" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-    <header class="topbar"><span class="brand"><img src="/_router/maintenance/assets/network.svg" width="22" height="22" alt="">Router</span><div class="top-actions">{{if .Preview}}<span class="preview-label">Предпросмотр</span>{{end}}<button id="theme-button" class="icon-button" type="button" title="Переключить тему" aria-label="Переключить тему"><span class="icon theme-icon" aria-hidden="true"></span></button></div></header>
+    <header class="topbar"><span class="brand"><img src="/_router/maintenance/assets/qoncept.svg" width="22" height="22" alt=""><span class="brand-lockup"><strong>Router</strong><small>by Qoncept</small></span></span><div class="top-actions">{{if .Preview}}<span class="preview-label">Предпросмотр</span>{{end}}<button id="theme-button" class="icon-button" type="button" title="Переключить тему" aria-label="Переключить тему"><span class="icon theme-icon" aria-hidden="true"></span></button></div></header>
     <main>
         <section class="intro" aria-labelledby="page-title">
-            <div class="signal-symbol" aria-hidden="true"><img src="/_router/maintenance/assets/network.svg" alt="" width="28" height="28"><span></span></div>
+            <div class="signal-symbol" aria-hidden="true"><img src="/_router/maintenance/assets/qoncept.svg" alt="" width="28" height="28"><span></span></div>
             <div class="status-badge"><span class="status-dot"></span><span id="service-label">{{if .Automatic}}Сервис временно недоступен{{else}}Техническое обслуживание{{end}}</span></div>
             <h1 id="page-title">Небольшая пауза.</h1>
             <p id="service-description">{{if .Automatic}}Ожидаем восстановления соединения с сайтом.{{else}}На сайте идут технические работы.{{end}}</p>
@@ -31,6 +31,6 @@
             <noscript>Для игры нужен JavaScript. <a href="/">Открыть сайт</a></noscript>
         </section>
     </main>
-    <footer><span>Router</span><a href="/_router/maintenance/assets/license.txt" target="_blank" rel="noopener">2048 · Gabriele Cirulli</a></footer>
+    <footer><a href="https://qoncept.by" target="_blank" rel="noopener noreferrer">Router by Qoncept</a><a href="/_router/maintenance/assets/license.txt" target="_blank" rel="noopener">2048 · Gabriele Cirulli</a></footer>
 </body>
 </html>

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,7 +17,7 @@ func TestHealthLifecycle(t *testing.T) {
 	var code atomic.Int32
 	code.Store(200)
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "app.test" {
+		if !strings.HasPrefix(r.Host, "127.0.0.1:") {
 			t.Errorf("health Host: %s", r.Host)
 		}
 		w.WriteHeader(int(code.Load()))
@@ -51,6 +53,79 @@ func TestHealthLifecycle(t *testing.T) {
 	saved, _ := persisted.GetRule("app.test")
 	if saved.ServiceDown || !saved.Maintenance {
 		t.Fatal("automatic health persisted or manual state lost")
+	}
+}
+
+func TestOutageTransitions(t *testing.T) {
+	s := NewRuleStore(NewStorage(filepath.Join(t.TempDir(), "rules.json")))
+	s.Add("app.test", "localhost:1234")
+	var count atomic.Int32
+	s.SetServiceDownListener(func(event ServiceOutage) {
+		// Reading the store here also verifies that callbacks run outside its lock.
+		rule, _ := s.GetRule(event.Host)
+		if !rule.ServiceDown || event.Reason == "" || event.At.IsZero() {
+			t.Error("invalid outage", event)
+		}
+		count.Add(1)
+	})
+	probe := func(err error) {
+		snapshot, _ := s.GetRule("app.test")
+		s.applyHealth(snapshot, snapshot.healthRevision, err, time.Now())
+	}
+	probe(fmt.Errorf("HTTP 503"))
+	if count.Load() != 0 {
+		t.Fatal("alert on first failed probe")
+	}
+	probe(fmt.Errorf("HTTP 503"))
+	probe(fmt.Errorf("HTTP 503"))
+	if count.Load() != 1 {
+		t.Fatal("missing or repeated alert", count.Load())
+	}
+	probe(nil)
+	probe(nil)
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.ReportServiceFailure("app.test", "localhost:1234") }()
+	}
+	wg.Wait()
+	if count.Load() != 2 {
+		t.Fatal("concurrent failure duplicated or recovery suppressed alert", count.Load())
+	}
+	probe(nil)
+	probe(nil)
+	s.SetRuleMaintenance("app.test", true)
+	s.ReportServiceFailure("app.test", "localhost:1234")
+	if count.Load() != 2 {
+		t.Fatal("manual maintenance emitted an automatic alert")
+	}
+	s.SetRuleMaintenance("app.test", false)
+	probe(nil)
+	probe(nil)
+	s.SetMaintenanceMode(true)
+	s.ReportServiceFailure("app.test", "localhost:1234")
+	if count.Load() != 2 {
+		t.Fatal("global maintenance emitted an automatic alert")
+	}
+	s.SetMaintenanceMode(false)
+	s.SetPanelAddress("127.0.0.1:8162")
+	s.Add("panel.test", "localhost:8162")
+	s.ReportServiceFailure("panel.test", "localhost:8162")
+	if count.Load() != 2 {
+		t.Fatal("panel emitted an automatic alert")
+	}
+}
+
+func TestRecreatedRuleIgnoresOldHealth(t *testing.T) {
+	s := NewRuleStore(NewStorage(filepath.Join(t.TempDir(), "rules.json")))
+	s.Add("app.test", "localhost:1234")
+	old, _ := s.GetRule("app.test")
+	s.Remove("app.test")
+	s.Add("app.test", "localhost:1234")
+	s.applyHealth(old, old.healthRevision, fmt.Errorf("old failure"), time.Now())
+	current, _ := s.GetRule("app.test")
+	if !current.HealthCheckedAt.IsZero() {
+		t.Fatal("stale probe applied to recreated rule")
 	}
 }
 

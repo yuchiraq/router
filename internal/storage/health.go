@@ -14,6 +14,26 @@ import (
 
 const HealthInterval = 10 * time.Second
 
+type ServiceOutage struct {
+	Host   string
+	Reason string
+	At     time.Time
+}
+
+// Listeners run outside the store lock; delivery must not block proxy requests.
+func (s *RuleStore) SetServiceDownListener(listener func(ServiceOutage)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onServiceDown = listener
+}
+
+func (s *RuleStore) serviceOutageLocked(host string, wasDown bool, rule *Rule) *ServiceOutage {
+	if wasDown || !rule.ServiceDown || rule.Maintenance || s.MaintenanceMode || isPanelTarget(rule.Target, s.panelAddress) {
+		return nil
+	}
+	return &ServiceOutage{Host: host, Reason: rule.HealthError, At: rule.HealthCheckedAt}
+}
+
 var healthClient = &http.Client{
 	Timeout:       3 * time.Second,
 	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -113,12 +133,20 @@ func probeService(ctx context.Context, rule *Rule) error {
 
 func (s *RuleStore) applyHealth(snapshot *Rule, revision uint64, err error, now time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var event *ServiceOutage
+	listener := s.onServiceDown
+	defer func() {
+		s.mu.Unlock()
+		if event != nil && listener != nil {
+			listener(*event)
+		}
+	}()
 	current, ok := s.rules[snapshot.Host]
 	if !ok || current.Target != snapshot.Target || current.healthGeneration != snapshot.healthGeneration || current.healthRevision != revision {
 		return
 	}
 	current.HealthCheckedAt = now
+	wasDown := current.ServiceDown
 	if err != nil {
 		current.healthFailures++
 		current.healthSuccesses = 0
@@ -135,20 +163,30 @@ func (s *RuleStore) applyHealth(snapshot *Rule, revision uint64, err error, now 
 		}
 	}
 	current.healthRevision++
+	event = s.serviceOutageLocked(snapshot.Host, wasDown, current)
 }
 
 // Proxy transport failures take effect immediately; manual maintenance is untouched.
 func (s *RuleStore) ReportServiceFailure(host, target string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var event *ServiceOutage
+	listener := s.onServiceDown
+	defer func() {
+		s.mu.Unlock()
+		if event != nil && listener != nil {
+			listener(*event)
+		}
+	}()
 	current, ok := s.rules[host]
 	if !ok || current.Target != target {
 		return
 	}
+	wasDown := current.ServiceDown
 	current.ServiceDown = true
 	current.healthFailures = 2
 	current.healthSuccesses = 0
 	current.HealthError = "Соединение с сервисом прервано"
 	current.HealthCheckedAt = time.Now()
 	current.healthRevision++
+	event = s.serviceOutageLocked(host, wasDown, current)
 }

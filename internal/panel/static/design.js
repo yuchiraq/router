@@ -15,7 +15,8 @@
         nav.addEventListener('pointerleave',reset);nav.addEventListener('focusout',reset);new ResizeObserver(reset).observe(nav);reset();
     }
     document.querySelectorAll('.fluid-tabs').forEach(tabs=>{
-        const marker=tabs.querySelector('.tab-indicator');
+        let marker=tabs.querySelector('.tab-indicator');
+        if(!marker){marker=document.createElement('span');marker.className='tab-indicator';marker.setAttribute('aria-hidden','true');tabs.prepend(marker);}
         const update=()=>moveIndicator(tabs,tabs.querySelector('[aria-selected="true"]'),marker);
         new ResizeObserver(update).observe(tabs);window.addEventListener('router-tabs-change',update);update();
     });

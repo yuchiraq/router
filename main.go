@@ -90,6 +90,9 @@ func main() {
 	}
 	adminStore := storage.NewAdminStore("admin.json", adminUser, adminPass)
 	store.SetPanelAddress(panelAddr)
+	store.SetServiceDownListener(func(event storage.ServiceOutage) {
+		go notifier.NotifyServiceUnavailable(event)
+	})
 	go store.StartHealthChecks(context.Background())
 
 	// --- Admin Panel ---

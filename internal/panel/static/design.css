@@ -10,6 +10,9 @@ body { background:var(--bg-color); font-size:.9375rem; }
 .nav-container { padding:32px 16px 20px; gap:44px; }
 .nav-logo { font-size:22px; font-weight:750; gap:10px; }
 .nav-logo .icon { color:var(--brand); width:25px; height:25px; }
+.brand-lockup{display:flex;flex-direction:column;gap:2px;line-height:1.1}.brand-lockup strong{font-size:20px;font-weight:750}.brand-lockup small{font-size:11px;font-weight:500;color:var(--text-secondary)}
+.login-byline{display:block;font-size:1rem;color:var(--text-secondary);font-weight:500;margin-top:8px}
+.nav-logo .icon{width:32px;height:32px;color:var(--text-primary)}.auth-brand .brand-lockup strong{font-size:18px}.auth-brand .icon{width:32px;height:32px;color:var(--text-primary)}
 .nav-links { position:relative; gap:6px; }
 .nav-links a,.nav-more { position:relative; z-index:1; }
 .nav-links a.active,.nav-links a:hover { background:transparent; box-shadow:none; color:var(--text-primary); }

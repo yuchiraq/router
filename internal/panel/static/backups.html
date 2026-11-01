@@ -3,254 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Резервные копии · Router</title>
+    <title>Резервные копии · Router by Qoncept</title>
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/static/design.css">
+    <link rel="stylesheet" href="/static/backups.css">
     <script src="/static/panel.js" defer></script>
     <script src="/static/design.js" defer></script>
+    <script src="/static/backups.js" defer></script>
 </head>
 <body>
-    <nav class="nav">
-        <div class="nav-container">
-            <a href="/account" class="nav-logo">Router</a>
-            <div class="nav-links">
-                <a href="/">Маршруты</a>
-                <a href="/stats">Обзор</a>
-                <a href="/backups" class="active">Копии</a>
-                <a href="/notifications">Уведомления</a>
-                <a href="/settings">GPT</a>
-            </div>
-        </div>
-    </nav>
-    <main class="container">
-        <div class="header"><h1>Резервные копии</h1><button class="btn" id="new-job-btn" type="button"><span class="icon" style="--icon:url(/static/icons/plus.svg)" aria-hidden="true"></span>Добавить задание</button></div>
+    <nav class="nav"><div class="nav-container"><a href="/" class="nav-logo">Router by Qoncept</a><div class="nav-links"><a href="/">Маршруты</a><a href="/backups" class="active">Копии</a></div></div></nav>
+    <main class="container backups-page">
+        <header class="header"><div><p class="eyebrow">Хранение и восстановление</p><h1>Резервные копии</h1></div><button class="btn" id="new-job-btn" type="button"><span class="icon" style="--icon:url(/static/icons/plus.svg)" aria-hidden="true"></span>Новое задание</button></header>
+        <section class="route-overview backup-overview" aria-label="Сводка резервных копий">
+            <div><span>По расписанию</span><strong id="backup-active">—</strong></div>
+            <div><span>Архивов</span><strong id="backup-count">—</strong></div>
+            <div><span>Объём архивов</span><strong id="backup-size">—</strong></div>
+            <div><span>Последняя копия</span><strong id="backup-latest" class="summary-date">—</strong></div>
+        </section>
         <p id="status-msg" class="status-line" role="status" aria-live="polite"></p>
-
-        <div class="card">
-            <div class="card-header">Задания</div>
-            <div class="card-body">
-                <div id="jobs-table" class="disk-table" style="margin-bottom:12px;"></div>
+        <details id="backup-error" class="backup-error" hidden><summary><span class="icon" style="--icon:url(/static/icons/triangle-alert.svg)" aria-hidden="true"></span>Ошибка последнего копирования</summary><p id="backup-error-detail" class="diagnostic-text"></p></details>
+        <div class="list-toolbar backup-toolbar">
+            <div class="fluid-tabs" role="tablist" aria-label="Резервные копии">
+                <button type="button" role="tab" id="jobs-tab" aria-selected="true" aria-controls="jobs-panel" data-backup-tab="jobs">Задания <span id="jobs-count">0</span></button>
+                <button type="button" role="tab" id="archives-tab" aria-selected="false" aria-controls="archives-panel" tabindex="-1" data-backup-tab="archives">Архивы <span id="archives-count">0</span></button>
             </div>
+            <div class="backup-tools"><label class="search-field"><span class="icon" style="--icon:url(/static/icons/search.svg)" aria-hidden="true"></span><input id="backup-search" class="form-control" type="search" placeholder="Найти задание или архив…" aria-label="Поиск резервных копий"></label><button id="refresh-backups" type="button" class="btn btn-icon" title="Обновить" aria-label="Обновить резервные копии"><span class="icon" style="--icon:url(/static/icons/rotate-ccw.svg)" aria-hidden="true"></span></button></div>
         </div>
-
-        <div class="card" id="settings-card" style="display:none;">
-            <div class="card-header">Настройки задания</div>
-            <div class="card-body">
-                <input type="hidden" id="job-id">
-                <div class="form-grid" style="margin-bottom:20px;">
-                    <label class="field">Название задания<input class="form-control" id="name" placeholder="Например, документы" required></label>
-                    <label class="check-row"><input type="checkbox" id="enabled">Запускать по расписанию</label>
-                    <label class="field full">Папка для архивов<input class="form-control" id="destinationDir" placeholder="/mnt/backups" required></label>
-                    <label class="field">Интервал, мин<input class="form-control" id="intervalMinutes" type="number" min="1" required></label>
-                    <label class="field">Хранить копий<input class="form-control" id="keepCopies" type="number" min="1" required></label>
-                    <label class="field full">Что копировать<textarea class="form-control" id="sources" rows="4" placeholder="По одному пути к файлу или папке на строку" required></textarea></label>
-                </div>
-                <div class="form-inline">
-                    <button class="btn" id="save-btn" type="button">Сохранить</button>
-                    <button class="btn btn-secondary" id="run-btn" type="button">Создать копию сейчас</button>
-                    <button class="btn btn-danger" id="delete-btn" type="button">Удалить задание</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">Архивы</div>
-            <div class="card-body">
-                <details id="backup-error" hidden><summary>Ошибка последнего копирования</summary><p id="backup-error-detail" class="diagnostic-text"></p></details>
-                <div class="disk-table" id="backups-table"></div>
-            </div>
-        </div>
-
-        <script>
-            (function () {
-                var state = { jobs: [], entries: [], selectedId: '' };
-                function escapeHTML(value) { var span=document.createElement('span'); span.textContent=String(value || ''); return span.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
-                function setStatus(text, isError) {
-                    var el = document.getElementById('status-msg');
-                    el.textContent = text || '';
-                    el.style.color = isError ? 'var(--accent-red)' : 'var(--text-secondary)';
-                }
-
-                function showSettings() {
-                    document.getElementById("settings-card").style.display = "block";
-                    document.getElementById("settings-card").scrollIntoView({block:'start',behavior:'instant'});
-                }
-
-                function hideSettings() {
-                    document.getElementById("settings-card").style.display = "none";
-                }
-
-                function clearForm() {
-                    document.getElementById('job-id').value = '';
-                    document.getElementById('name').value = '';
-                    document.getElementById('enabled').checked = false;
-                    document.getElementById('destinationDir').value = '';
-                    document.getElementById('intervalMinutes').value = 60;
-                    document.getElementById('keepCopies').value = 10;
-                    document.getElementById('sources').value = '';
-                    state.selectedId = '';
-                }
-
-                function fillForm(job) {
-                    if (!job) {
-                        clearForm();
-                        return;
-                    }
-                    document.getElementById('job-id').value = job.id || '';
-                    document.getElementById('name').value = job.name || '';
-                    document.getElementById('enabled').checked = !!job.enabled;
-                    document.getElementById('destinationDir').value = job.destinationDir || '';
-                    document.getElementById('intervalMinutes').value = job.intervalMinutes || 60;
-                    document.getElementById('keepCopies').value = job.keepCopies || 10;
-                    document.getElementById('sources').value = (job.sources || []).join('\n');
-                    state.selectedId = job.id || '';
-                }
-
-                function renderJobs() {
-                    var table = document.getElementById('jobs-table');
-                    var rows = '';
-                    for (var i = 0; i < state.jobs.length; i++) {
-                        var j = state.jobs[i];
-                        rows += '<div class="disk-row">' +
-                            '<div class="disk-main">' +
-                                '<div class="disk-title">' + escapeHTML(j.name || j.id) + '</div>' +
-                                '<div class="disk-subtitle">' + (j.enabled ? 'По расписанию' : 'Приостановлено') + ' · каждые ' + Number(j.intervalMinutes || 60) + ' мин · хранить: ' + Number(j.keepCopies || 10) + '</div>' +
-                            '</div>' +
-                            '<div><button class="btn btn-secondary" data-select-id="' + escapeHTML(j.id) + '">Изменить</button></div>' +
-                        '</div>';
-                    }
-                    table.innerHTML = rows || '<div class="disk-empty">Заданий пока нет</div>';
-
-                    var buttons = table.querySelectorAll('[data-select-id]');
-                    for (var bi = 0; bi < buttons.length; bi++) {
-                        buttons[bi].addEventListener('click', function (ev) {
-                            var id = ev.currentTarget.getAttribute('data-select-id');
-                            for (var i = 0; i < state.jobs.length; i++) {
-                                if (state.jobs[i].id === id) {
-                                    showSettings();
-                                    fillForm(state.jobs[i]);
-                                    break;
-                                }
-                            }
-                        });
-                    }
-                }
-
-                function renderEntries() {
-                    var table = document.getElementById('backups-table');
-                    var rows = '';
-                    for (var i = 0; i < state.entries.length; i++) {
-                        var e = state.entries[i];
-                        rows += '<div class="disk-row">' +
-                            '<div class="disk-main"><div class="disk-title">' + escapeHTML(e.jobName) + '</div><div class="disk-subtitle">' + escapeHTML(e.path) + '</div></div>' +
-                            '<div class="disk-metrics"><div>' + new Date(e.createdAt).toLocaleString('ru-RU') + '</div><div>' + (e.sizeBytes / 1024 / 1024).toFixed(2) + ' МиБ</div></div>' +
-                        '</div>';
-                    }
-                    table.innerHTML = rows || '<div class="disk-empty">Архивов пока нет</div>';
-                }
-
-                function fetchData() {
-                    return fetch('/backups/data', { credentials: 'same-origin' })
-                        .then(function (response) {
-                            if (!response.ok) throw new Error('Не удалось загрузить резервные копии');
-                            return response.json();
-                        })
-                        .then(function (data) {
-                            state.jobs = data.jobs || [];
-                            state.entries = data.entries || [];
-                            renderJobs();
-                            renderEntries();
-                            document.getElementById('backup-error').hidden = !data.lastError;
-                            document.getElementById('backup-error-detail').textContent = data.lastError || '';
-                        })
-                        .catch(function (err) { setStatus(window.RouterUI.errorMessage(err), true); });
-                }
-
-                function saveJob() {
-                    var body = new URLSearchParams();
-                    body.set('id', document.getElementById('job-id').value.trim());
-                    body.set('name', document.getElementById('name').value.trim());
-                    body.set('enabled', document.getElementById('enabled').checked ? 'on' : '');
-                    body.set('destinationDir', document.getElementById('destinationDir').value.trim());
-                    body.set('intervalMinutes', document.getElementById('intervalMinutes').value || '60');
-                    body.set('keepCopies', document.getElementById('keepCopies').value || '10');
-                    body.set('sources', document.getElementById('sources').value || '');
-                    return fetch('/backups/config', {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
-                    }).then(function (response) {
-                        if (!response.ok) throw new Error('Не удалось сохранить задание');
-                        return response.json();
-                    }).then(function (data) {
-                        if (data.job && data.job.id) {
-                            state.selectedId = data.job.id;
-                            fillForm(data.job);
-                        }
-                        setStatus('Задание сохранено', false);
-                    });
-                }
-
-                function runNow() {
-                    var id = document.getElementById('job-id').value.trim();
-                    if (!id) throw new Error('Сначала сохраните задание');
-                    var body = new URLSearchParams();
-                    body.set('id', id);
-                    return fetch('/backups/run', {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
-                    }).then(function (response) {
-                        if (!response.ok) throw new Error('Не удалось создать копию. Проверьте пути и свободное место.');
-                        setStatus('Резервная копия создана', false);
-                    });
-                }
-
-                function deleteJob() {
-                    var id = document.getElementById('job-id').value.trim();
-                    if (!id) throw new Error('Выберите сохранённое задание');
-                    var body = new URLSearchParams();
-                    body.set('id', id);
-                    return fetch('/backups/delete', {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
-                    }).then(function (response) {
-                        if (!response.ok) throw new Error('Не удалось удалить задание');
-                        clearForm();
-                        hideSettings();
-                        setStatus('Задание удалено', false);
-                    });
-                }
-
-                document.getElementById('new-job-btn').addEventListener('click', function () {
-                    clearForm();
-                    showSettings();
-                });
-                function perform(action, button, label) {
-                    var buttons = ['save-btn','run-btn','delete-btn'].map(id=>document.getElementById(id));
-                    var previous = button.textContent; buttons.forEach(el=>el.disabled=true); button.textContent=label;
-                    return Promise.resolve().then(action).then(fetchData).catch(function(e){setStatus(window.RouterUI.errorMessage(e),true);window.RouterUI.announce(window.RouterUI.errorMessage(e),true);}).finally(function(){buttons.forEach(el=>el.disabled=false);button.textContent=previous;});
-                }
-                document.getElementById('save-btn').addEventListener('click', function () {
-                    for (var input of document.querySelectorAll('#settings-card input:not([type="hidden"]),#settings-card textarea')) { if (!input.reportValidity()) return; }
-                    perform(saveJob,this,'Сохранение…');
-                });
-                document.getElementById('run-btn').addEventListener('click', function () { perform(runNow,this,'Создание копии…'); });
-                document.getElementById('delete-btn').addEventListener('click', async function () {
-                    if (!state.selectedId) { setStatus('Выберите сохранённое задание',true); return; }
-                    if (await window.RouterUI.confirm('Удалить задание?', 'Автоматическое создание копий для этого задания прекратится.','Удалить')) await perform(deleteJob,this,'Удаление…');
-                });
-
-                clearForm();
-                hideSettings();
-                fetchData();
-            })();
-        </script>
+        <section id="jobs-panel" role="tabpanel" aria-labelledby="jobs-tab"><div class="backup-columns" aria-hidden="true"><span>Задание / папка</span><span>Последняя копия</span><span>Действия</span></div><div id="jobs-table" aria-live="polite"><p class="disk-empty">Загрузка заданий…</p></div></section>
+        <section id="archives-panel" role="tabpanel" aria-labelledby="archives-tab" hidden><div class="archive-filter"><label for="archive-job">Задание</label><select id="archive-job" class="form-control"><option value="">Все задания</option></select></div><div class="backup-columns archive-columns" aria-hidden="true"><span>Архив / путь</span><span>Создан</span><span>Размер</span></div><div id="backups-table" aria-live="polite"></div></section>
     </main>
+    <dialog id="settings-card" class="sheet backup-editor" aria-labelledby="editor-title">
+        <form id="backup-form">
+            <div class="sheet-header"><h2 id="editor-title">Новое задание</h2><button class="btn btn-icon" type="button" id="close-editor" aria-label="Закрыть редактор" title="Закрыть"><span class="icon" style="--icon:url(/static/icons/x.svg)" aria-hidden="true"></span></button></div>
+            <input type="hidden" id="job-id" name="id">
+            <div class="form-grid">
+                <label class="field full">Название<input class="form-control" id="name" name="name" placeholder="Например, документы WorkService" maxlength="200" required></label>
+                <label class="field full">Исходные файлы и папки<textarea class="form-control" id="sources" name="sources" rows="3" placeholder="/home/user/project/data" required></textarea><small>По одному пути на строку</small></label>
+                <label class="field full">Папка для архивов<input class="form-control" id="destinationDir" name="destinationDir" placeholder="/mnt/backups" required></label>
+                <label class="field">Хранить копий<input class="form-control" id="keepCopies" name="keepCopies" type="number" min="1" max="10000" step="1" value="10" required></label>
+                <label class="field">Интервал, мин<input class="form-control" id="intervalMinutes" name="intervalMinutes" type="number" min="1" max="525600" step="1" value="60" required></label>
+                <label class="check-row full"><input type="checkbox" id="enabled" name="enabled">Автоматически по расписанию</label>
+            </div>
+            <p id="editor-error" class="status-line" role="alert" hidden></p>
+            <div class="sheet-actions backup-editor-actions"><button class="btn btn-danger btn-icon" id="delete-btn" type="button" title="Удалить задание и его архивы" aria-label="Удалить задание и его архивы" hidden><span class="icon" style="--icon:url(/static/icons/trash-2.svg)" aria-hidden="true"></span></button><button class="btn btn-secondary" id="cancel-editor" type="button">Отмена</button><button class="btn" id="save-btn" type="submit">Сохранить</button></div>
+        </form>
+    </dialog>
 </body>
 </html>
