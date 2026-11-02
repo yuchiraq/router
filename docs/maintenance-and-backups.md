@@ -26,7 +26,7 @@
 
 - Qoncept: фирменный знак из соседнего проекта `concept/static/logos/logob.svg`, монохромный вариант для интерфейса. Сайт: https://qoncept.by/.
 - Собственная реализация интерактивных эффектов по мотивам Animata: [Fluid tabs](https://animata.design/docs/tabs/fluid-tabs), [Interactive grid](https://animata.design/docs/background/interactive-grid), [Border trail](https://animata.design/docs/container/animated-border-trail), [Ripple button](https://animata.design/docs/button/ripple-button).
-- Анимация заглушки: собственная реализация непрерывных параметрических контуров на Canvas 2D, без игрового движка и внешних ресурсов.
+- Анимация заглушки: [WebGL Fluid Enhanced 0.8.0](https://github.com/michaelbrusegard/WebGL-Fluid-Enhanced), основана на [WebGL Fluid Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation). Модуль, лицензия MIT и описание локальных исправлений находятся в `static/vendor/fluid`. Курсор перемешивает жидкость, нажатие создаёт импульсы. Пауза и скрытая вкладка останавливают расчёты. Canvas 2D с непрерывными контурами используется как запасной вариант без WebGL. Видео и внешних сетевых ресурсов нет.
 - Иконки Lucide: локальные файлы и лицензия в `internal/panel/static/icons`.
 
 Для обновления нужны не только новый исполняемый файл, но и каталоги `internal/panel/static` и `internal/panel/templates`. Конфигурации и архивы заменять нельзя.

@@ -14,6 +14,7 @@ WorkingDirectory=/var/lib/router
 ExecStart=/opt/router/current/router
 Environment=PANEL_ADDR=127.0.0.1:8162
 Environment=GOMEMLIMIT=512MiB
+Environment=ROUTER_DISK_SNAPSHOT=/run/router-disks/snapshot.json
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30

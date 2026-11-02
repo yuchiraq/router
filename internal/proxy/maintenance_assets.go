@@ -6,6 +6,7 @@ import "net/http"
 var maintenanceAssets = map[string]string{
 	"maintenance.css": "maintenance.css", "maintenance.js": "maintenance.js",
 	"visual.js": "maintenance-visual.js", "pause.svg": "icons/pause.svg",
+	"fluid.js": "vendor/fluid/fluid.js", "fallback.js": "maintenance-fallback.js",
 	"network.svg": "icons/network.svg", "rotate-ccw.svg": "icons/rotate-ccw.svg",
 	"qoncept.svg":  "icons/qoncept.svg",
 	"arrow-up.svg": "icons/arrow-up.svg", "arrow-down.svg": "icons/arrow-down.svg",

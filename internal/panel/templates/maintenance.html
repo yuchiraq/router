@@ -5,10 +5,10 @@
     <meta name="robots" content="noindex,nofollow"><title>Небольшая пауза · Router by Qoncept</title>
     <link rel="stylesheet" href="/_router/maintenance/assets/maintenance.css">
     <script src="/_router/maintenance/assets/maintenance.js" defer></script>
-    <script src="/_router/maintenance/assets/visual.js" defer></script>
+    <script src="/_router/maintenance/assets/visual.js" type="module"></script>
 </head>
 <body data-preview="{{if .Preview}}true{{else}}false{{end}}">
-    <canvas id="flow-field" aria-hidden="true"></canvas>
+    <div id="fluid-surface" aria-hidden="true"><canvas id="flow-field"></canvas></div>
     <div class="visual-shade" aria-hidden="true"></div>
     <header class="topbar">
         <a class="brand" href="https://qoncept.by" target="_blank" rel="noopener noreferrer"><img src="/_router/maintenance/assets/qoncept.svg" width="32" height="26" alt=""><span class="brand-lockup"><strong>Router</strong><small>by Qoncept</small></span></a>

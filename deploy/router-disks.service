@@ -1,0 +1,29 @@
+[Unit]
+Description=Router mounted filesystem metrics
+
+[Service]
+Type=oneshot
+User=yc_162
+Group=yc_162
+ExecStart=/opt/router/current/router --collect-disks /run/router-disks/snapshot.json
+RuntimeDirectory=router-disks
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+TimeoutStartSec=25
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX
+SystemCallFilter=~@mount @reboot @swap @module @raw-io @debug
+LockPersonality=true
+MemoryDenyWriteExecute=true

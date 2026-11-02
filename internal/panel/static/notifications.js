@@ -9,7 +9,7 @@
         if (!response.ok) throw new Error(response.status === 401 ? 'Сессия завершена. Войдите снова.' : (await response.text()) || 'Ошибка запроса');
         return response.status === 204 ? null : response.json();
     }
-    const strings = ['token','chatIds','webhookUrl','webhookSecret','diskPaths'];
+    const strings = ['token','chatIds','webhookUrl','webhookSecret'];
     const numbers = ['quietStart','quietEnd','diskWarning','diskCritical','diskReminderHours'];
     function quietSummary() {
         $('quiet-summary').textContent = !$('quietEnabled').checked ? 'Без ограничения по времени' : $('quietStart').value === $('quietEnd').value ? 'Пауза на весь день, включая критические уведомления' : 'В указанные часы приостановлены все уведомления, включая критические';
@@ -33,14 +33,13 @@
             row.classList.toggle('disk-warning',stale || disk.usedPercent >= data.config.diskWarning);
             row.append(name,value); list.append(row);
         });
-        (data.unavailable || []).forEach(path => { const row = document.createElement('p'); row.className='form-error'; row.textContent=`Недоступен путь: ${path}`; list.append(row); });
-        if (!list.children.length) list.textContent = 'Нет данных о дисках. Добавьте путь и дождитесь проверки.';
+        (data.unavailable || []).forEach(path => { const row = document.createElement('p'); row.className='form-error'; row.textContent=path; list.append(row); });
+        if (!list.children.length) list.textContent = 'Ожидаем автоматического обнаружения дисков.';
     }
     function fill(cfg) {
         $('enabled').checked = !!cfg.enabled; $('quietEnabled').checked = !!cfg.quietHoursOn;
         $('token').value = cfg.token || ''; $('chatIds').value = (cfg.chatIds || []).join(', ');
         $('webhookUrl').value = cfg.webhookUrl || ''; $('webhookSecret').value = cfg.webhookSecret || '';
-        $('diskPaths').value = (cfg.diskPaths || []).join('\n');
         const values = {quietStart:cfg.quietHoursStart ?? 20, quietEnd:cfg.quietHoursEnd ?? 8, diskWarning:cfg.diskWarning || 85, diskCritical:cfg.diskCritical || 95, diskReminderHours:cfg.diskReminderHours || 6};
         numbers.forEach(id => $(id).value = values[id]);
         quietSummary();

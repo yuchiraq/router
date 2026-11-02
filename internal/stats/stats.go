@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
 	netutil "github.com/shirou/gopsutil/net"
 )
@@ -145,49 +143,6 @@ func (s *Stats) RecordCPU() {
 	if len(s.cpu) > 1000 {
 		s.cpu = s.cpu[len(s.cpu)-1000:]
 	}
-}
-
-// RecordDisks preserves the original / and /media selection, plus explicit paths.
-func (s *Stats) RecordDisks(extraPaths ...string) {
-	partitions, _ := disk.Partitions(false)
-	entries, unavailable := collectDisks(partitions, extraPaths, disk.Usage, time.Now())
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.disks, s.diskUnavailable = entries, unavailable
-}
-
-func collectDisks(partitions []disk.PartitionStat, extra []string, usageFor func(string) (*disk.UsageStat, error), now time.Time) ([]DiskUsage, []string) {
-	selected := map[string]disk.PartitionStat{}
-	// Root is part of the existing default, even if partition discovery fails.
-	if runtime.GOOS != "windows" {
-		selected["/"] = disk.PartitionStat{Mountpoint: "/"}
-	}
-	for _, partition := range partitions {
-		if partition.Device != "" && (partition.Mountpoint == "/" || strings.HasPrefix(partition.Mountpoint, "/media/")) {
-			selected[partition.Mountpoint] = partition
-		}
-	}
-	for _, p := range extra {
-		if _, exists := selected[p]; !exists {
-			selected[p] = disk.PartitionStat{Mountpoint: p}
-		}
-	}
-	entries, unavailable := []DiskUsage{}, []string{}
-	for p, partition := range selected {
-		usage, err := usageFor(p)
-		if err != nil || usage == nil || usage.Total == 0 {
-			unavailable = append(unavailable, p)
-			continue
-		}
-		fstype := partition.Fstype
-		if fstype == "" {
-			fstype = usage.Fstype
-		}
-		entries = append(entries, DiskUsage{Time: now, Mountpoint: p, Device: partition.Device, Fstype: fstype, UsedPercent: usage.UsedPercent, Free: usage.Free, Total: usage.Total})
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Mountpoint < entries[j].Mountpoint })
-	sort.Strings(unavailable)
-	return entries, unavailable
 }
 
 func (s *Stats) UnavailableDisks() []string {

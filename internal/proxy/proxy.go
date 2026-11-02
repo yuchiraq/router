@@ -99,6 +99,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if p.notifier != nil {
 			p.notifier.NotifyWithBanButton("suspicious_probe", "probe:"+remoteIP+":"+r.URL.Path, notify.BuildProxyAlert(r.Method, r.URL.Path, r.Host, remoteIP, "suspicious path probe"), remoteIP)
 		}
+		if autoBanned {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 	}
 
 	if (rule.Maintenance || rule.ServiceDown) && !panelRoute {
@@ -177,7 +181,7 @@ func (p *Proxy) serveMaintenance(w http.ResponseWriter, r *http.Request, automat
 	w.Header().Set("Retry-After", "15")
 	w.Header().Set("X-Router-Maintenance", "1")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("X-Frame-Options", "DENY")
 	htmlResponse := (r.Method == http.MethodGet || r.Method == http.MethodHead) && (strings.Contains(r.Header.Get("Accept"), "text/html") || r.Header.Get("Accept") == "")
 	if htmlResponse {
@@ -266,11 +270,10 @@ func appendForwardedFor(existing, remoteIP string) string {
 
 func suspiciousPath(path string) bool {
 	path = strings.ToLower(path)
-	probes := []string{".env", "wp-admin", "wp-login", "phpmyadmin", "adminer", "/etc/passwd", "/.git"}
-	for _, p := range probes {
-		if strings.Contains(path, p) {
+	for _, part := range strings.Split(path, "/") {
+		if part == ".env" || strings.HasPrefix(part, ".env.") || part == ".git" || part == "wp-admin" || part == "wp-login.php" || part == "phpmyadmin" || part == "adminer.php" {
 			return true
 		}
 	}
-	return false
+	return path == "/etc/passwd"
 }

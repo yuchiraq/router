@@ -221,14 +221,17 @@ func (n *TelegramNotifier) shouldSkip(key string) bool {
 	if ok && now.Sub(last) < n.cooldown {
 		return true
 	}
-	n.lastSentKey[key] = now
-	if len(n.lastSentKey) > 5000 {
+	if len(n.lastSentKey) >= 5000 {
 		for k, t := range n.lastSentKey {
 			if now.Sub(t) > 10*n.cooldown {
 				delete(n.lastSentKey, k)
 			}
 		}
+		if _, exists := n.lastSentKey[key]; !exists && len(n.lastSentKey) >= 5000 {
+			return true
+		}
 	}
+	n.lastSentKey[key] = now
 	return false
 }
 

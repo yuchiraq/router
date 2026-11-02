@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Router filesystem metrics
+
+[Timer]
+OnBootSec=5
+OnUnitActiveSec=30
+AccuracySec=1
+Unit=router-disks.service
+
+[Install]
+WantedBy=timers.target

@@ -312,9 +312,11 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		// Sampling belongs to the background collector, not every browser poll.
 		suspicious := []storage.SuspiciousIP{}
 		autoBanned := []storage.SuspiciousIP{}
+		reputationError := ""
 		if h.ipStore != nil {
 			suspicious = h.ipStore.List()
 			autoBanned = h.ipStore.AutoBannedList()
+			reputationError = h.ipStore.LastError()
 		}
 		requestData := h.stats.GetRequestData()
 		memoryLabels, memoryValues, memoryPercents := h.stats.GetMemoryData()
@@ -329,7 +331,8 @@ func (h *Handler) StatsData(w http.ResponseWriter, r *http.Request) {
 		sshData := h.stats.GetSSHData()
 
 		data := map[string]interface{}{
-			"requests": requestData,
+			"reputationError": reputationError,
+			"requests":        requestData,
 			"memory": map[string]interface{}{
 				"labels":   memoryLabels,
 				"values":   memoryValues,
@@ -416,8 +419,8 @@ func (h *Handler) BanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ip := r.FormValue("ip")
-		if ip == "" {
-			http.Error(w, "ip is required", http.StatusBadRequest)
+		if !storage.ValidReputationIP(ip) {
+			http.Error(w, "Укажите корректный IPv4/IPv6, кроме loopback и служебных адресов", http.StatusBadRequest)
 			return
 		}
 		if h.ipStore == nil {
@@ -425,6 +428,14 @@ func (h *Handler) BanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.ipStore.Ban(ip)
+		if h.ipStore.LastError() != "" {
+			http.Error(w, "Блокировка применена в памяти, но не сохранена на диск", http.StatusInternalServerError)
+			return
+		}
+		if !h.ipStore.IsBanned(ip) {
+			http.Error(w, "Лимит активных блокировок достигнут", http.StatusConflict)
+			return
+		}
 		if h.notifier != nil {
 			h.notifier.Notify("manual_ban", "manual-ban:"+ip, "⛔️ Manual ban\nip: "+ip)
 		}
@@ -440,8 +451,8 @@ func (h *Handler) UnbanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ip := r.FormValue("ip")
-		if ip == "" {
-			http.Error(w, "ip is required", http.StatusBadRequest)
+		if !storage.ValidReputationIP(ip) {
+			http.Error(w, "Некорректный IP", http.StatusBadRequest)
 			return
 		}
 		if h.ipStore == nil {
@@ -449,6 +460,10 @@ func (h *Handler) UnbanSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.ipStore.Unban(ip)
+		if h.ipStore.LastError() != "" {
+			http.Error(w, "Разблокировка применена в памяти, но не сохранена на диск", http.StatusInternalServerError)
+			return
+		}
 		if h.notifier != nil {
 			h.notifier.Notify("manual_unban", "manual-unban:"+ip, "✅ Manual unban\nip: "+ip)
 		}
@@ -464,8 +479,8 @@ func (h *Handler) RemoveSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ip := r.FormValue("ip")
-		if ip == "" {
-			http.Error(w, "ip is required", http.StatusBadRequest)
+		if !storage.ValidReputationIP(ip) {
+			http.Error(w, "Некорректный IP", http.StatusBadRequest)
 			return
 		}
 		if h.ipStore == nil {
@@ -477,6 +492,10 @@ func (h *Handler) RemoveSuspiciousIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.ipStore.Remove(ip)
+		if h.ipStore.LastError() != "" {
+			http.Error(w, "Удаление применено в памяти, но не сохранено на диск", http.StatusInternalServerError)
+			return
+		}
 		if h.notifier != nil {
 			h.notifier.Notify("manual_remove", "manual-remove:"+ip, "🧹 Removed from suspicious list\nip: "+ip)
 		}
@@ -694,6 +713,11 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.ipStore.Ban(ip)
+	if !h.ipStore.IsBanned(ip) || h.ipStore.LastError() != "" {
+		h.notifier.SendActionResult("Не удалось сохранить блокировку. Проверьте состояние Router.")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	h.notifier.SendActionResult("⛔️ Banned from Telegram action\nip: " + ip)
 	w.WriteHeader(http.StatusNoContent)
 }

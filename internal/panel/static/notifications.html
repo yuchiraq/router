@@ -37,7 +37,6 @@
                     <label class="field">Критический уровень, %<input class="form-control" id="diskCritical" type="number" min="51" max="100" value="95" required></label>
                     <label class="field">Напоминать через, ч<input class="form-control" id="diskReminderHours" type="number" min="1" max="168" value="6" required></label>
                 </div>
-                <label class="field">Дополнительные пути<textarea class="form-control" id="diskPaths" aria-label="Дополнительные пути" aria-describedby="disk-path-help" rows="3" placeholder="/mnt/backup&#10;/home/yc_162/work_projects"></textarea><small id="disk-path-help">По одному абсолютному пути на строку. По умолчанию: / и разделы в /media. Проверяется свободное место на разделе, не размер папки.</small></label>
                 <div id="monitored-disks" class="monitored-disks" aria-label="Проверяемые диски"></div>
                 <button class="btn btn-secondary" type="button" id="disk-test-btn" disabled><span class="icon" style="--icon:url(/static/icons/bell.svg)" aria-hidden="true"></span>Тест заполнения в Telegram</button>
             </div>

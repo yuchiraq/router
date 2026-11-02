@@ -1,41 +1,110 @@
-(() => {
-    const canvas=document.getElementById('flow-field'),ctx=canvas.getContext('2d',{alpha:false}),button=document.getElementById('motion-button');
-    if(!ctx){button.hidden=true;return;}
-    const reduced=matchMedia('(prefers-reduced-motion:reduce)');
-    let width=0,height=0,ratio=1,phase=0,last=0,frame=0,paused=reduced.matches,point={x:0,y:0},target={x:0,y:0};
-    function draw(){
-        const light=document.documentElement.dataset.theme==='light';
-        ctx.fillStyle=light?'#eff2f0':'#101213';ctx.fillRect(0,0,width,height);
-        const mobile=width<700,lines=mobile?66:100,steps=mobile?66:100;
-        const cx=width*(mobile?.62:.74)+point.x*22,cy=height*(mobile?.28:.49)+point.y*20;
-        const scale=Math.min(width*(mobile?.9:.48),height*.66);
-        ctx.lineWidth=mobile?.75:.8;
-        for(let i=0;i<lines;i++){
-            const v=i/(lines-1),angle=v*Math.PI*2;
-            // A folded toroidal cross-section produces continuous, interference-like contours.
-            ctx.beginPath();
-            for(let j=0;j<=steps;j++){
-                const u=j/steps*Math.PI*2;
-                const twist=.38*Math.sin(u*2+phase*.24)+.2*Math.cos(angle+phase*.17);
-                const ring=.68+.25*Math.cos(angle+twist);
-                const x=(Math.cos(u)*ring+.2*Math.sin(angle)*Math.sin(phase*.12))*scale;
-                const y=(Math.sin(u)*ring*.64+.32*Math.sin(angle+twist))*scale;
-                const turn=-.48+.12*Math.sin(phase*.11);
-                const px=cx+x*Math.cos(turn)-y*Math.sin(turn),py=cy+x*Math.sin(turn)+y*Math.cos(turn);
-                if(j===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
-            }
-            const tone=Math.sin(angle+phase*.2),alpha=light?.23:.36;
-            ctx.strokeStyle=light?(tone>.35?`rgba(38,112,87,${alpha})`:`rgba(100,85,112,${alpha})`):(tone>.35?`rgba(135,226,186,${alpha})`:tone<-.4?`rgba(232,157,139,${alpha})`:`rgba(171,183,219,${alpha})`);
-            ctx.stroke();
-        }
+import Fluid from './fluid.js';
+
+const surface = document.getElementById('fluid-surface');
+const button = document.getElementById('motion-button');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+let fluid, frame = 0, paused = reduced.matches, running = false, failed = false, lastFeed = 0, lastPointer = null;
+const colors = ['#114737', '#431b32', '#44351b', '#193c49'];
+
+function controls() {
+    button.setAttribute('aria-pressed', String(paused));
+    button.title = button.ariaLabel = paused ? 'Продолжить движение' : 'Остановить движение';
+}
+
+function splat(x, y, dx, dy, color) {
+    if (!running) return;
+    const canvas = surface.querySelector('canvas');
+    // The library's public API uses backing-store X but CSS-pixel Y coordinates.
+    fluid.setConfig({ colorPalette: [color] });
+    fluid.splatAtLocation(x * canvas.width / canvas.clientWidth, y, dx, dy);
+}
+
+function seed() {
+    const mobile = innerWidth < 700;
+    const cx = innerWidth * (mobile ? .54 : .72), cy = innerHeight * (mobile ? .28 : .47);
+    const scale = Math.min(innerWidth * .36, innerHeight * .31);
+    for (let i = 0; i < 40; i++) {
+        const t = i / 39 * Math.PI * 3.6;
+        const radius = scale * (.35 + i / 70);
+        splat(cx + Math.cos(t) * radius, cy + Math.sin(t) * radius * .65,
+            -Math.sin(t) * 420, Math.cos(t) * 420, colors[Math.floor(i / 10)]);
     }
-    function tick(now){frame=0;if(paused||document.hidden)return;if(now-last>=32){phase+=Math.min((now-last)/1000,.05);last=now;point.x+=(target.x-point.x)*.025;point.y+=(target.y-point.y)*.025;draw();}frame=requestAnimationFrame(tick);}
-    function sync(){cancelAnimationFrame(frame);frame=0;button.setAttribute('aria-pressed',String(paused));button.title=button.ariaLabel=paused?'Продолжить движение':'Остановить движение';if(!paused&&!document.hidden){last=performance.now();frame=requestAnimationFrame(tick);}draw();}
-    function resize(){width=innerWidth;height=innerHeight;ratio=Math.min(devicePixelRatio||1,1.5);canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);ctx.setTransform(ratio,0,0,ratio,0,0);draw();}
-    button.onclick=()=>{paused=!paused;sync();};
-    reduced.addEventListener('change',()=>{paused=reduced.matches;sync();});
-    document.addEventListener('visibilitychange',sync);addEventListener('resize',resize);
-    addEventListener('pointermove',event=>{target={x:event.clientX/width-.5,y:event.clientY/height-.5};},{passive:true});
-    new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
-    resize();sync();
-})();
+}
+
+function feed(now) {
+    if (!running) return;
+    if (now - lastFeed > 110) {
+        lastFeed = now;
+        const t = now / 6000, mobile = innerWidth < 700;
+        const x = innerWidth * (mobile ? .55 : .73) + Math.sin(t * 1.3) * innerWidth * .17;
+        const y = innerHeight * (mobile ? .28 : .48) + Math.cos(t * .9) * innerHeight * .2;
+        splat(x, y, Math.cos(t * 1.3) * 90, Math.sin(t * .9) * 90, colors[Math.floor(now / 5000) % colors.length]);
+    }
+    frame = requestAnimationFrame(feed);
+}
+
+function sync() {
+    if (failed) return;
+    controls();
+    cancelAnimationFrame(frame);
+    if (paused || document.hidden) {
+        fluid.stop(); running = false;
+    } else if (!running) {
+        fluid.start(); running = true; seed(); frame = requestAnimationFrame(feed);
+    } else frame = requestAnimationFrame(feed);
+}
+
+function theme() {
+    if (failed) return;
+    const light = document.documentElement.dataset.theme === 'light';
+    fluid.setConfig({ backgroundColor: light ? '#100d0f' : '#101213', inverted: light });
+}
+
+async function fallback() {
+    failed = true;
+    cancelAnimationFrame(frame); fluid?.stop(); running = false;
+    const old = surface.querySelector('canvas'), canvas = document.createElement('canvas');
+    canvas.id = 'flow-field'; canvas.setAttribute('aria-hidden', 'true'); old.replaceWith(canvas);
+    surface.dataset.renderer = 'canvas';
+    await import('./fallback.js');
+}
+
+try {
+    fluid = new Fluid(surface);
+    surface.dataset.renderer = 'webgl';
+    fluid.setConfig({ simResolution: 128, dyeResolution: innerWidth < 700 ? 768 : 1024,
+        densityDissipation: .8, velocityDissipation: .3, pressureIterations: 18,
+        curl: 24, splatRadius: .18, bloom: false, sunrays: false, shading: true,
+        hover: false, colorful: false, brightness: .45, transparent: false });
+    theme();
+    if (paused) {
+        // Render a single initial field without continuous motion.
+        fluid.start(); running = true; seed();
+        requestAnimationFrame(() => requestAnimationFrame(sync));
+        controls();
+    } else sync();
+    button.onclick = () => { paused = !paused; sync(); };
+    reduced.addEventListener('change', () => { paused = reduced.matches; sync(); });
+    document.addEventListener('visibilitychange', sync);
+    new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    addEventListener('pointermove', event => {
+        if (!running || event.target.closest('button,a,input,select,textarea')) { lastPointer = null; return; }
+        const now = performance.now();
+        if (lastPointer && now - lastPointer.time < 16) return;
+        const dx = lastPointer ? event.clientX - lastPointer.x : 0;
+        const dy = lastPointer ? lastPointer.y - event.clientY : 0;
+        splat(event.clientX, event.clientY, Math.max(-1000, Math.min(1000, dx * 24)), Math.max(-1000, Math.min(1000, dy * 24)), colors[Math.floor(now / 1800) % colors.length]);
+        lastPointer = { x: event.clientX, y: event.clientY, time: now };
+    }, { passive: true });
+    addEventListener('pointerdown', event => {
+        if (!running || event.target.closest('button,a,input,select,textarea')) return;
+        for (let i = 0; i < 12; i++) {
+            const angle = i / 12 * Math.PI * 2;
+            splat(event.clientX + Math.cos(angle) * 14, event.clientY + Math.sin(angle) * 14,
+                Math.cos(angle) * 720, -Math.sin(angle) * 720, colors[i % colors.length]);
+        }
+    }, { passive: true });
+    surface.querySelector('canvas').addEventListener('webglcontextlost', event => { event.preventDefault(); fallback(); }, { once: true });
+} catch {
+    await fallback();
+}

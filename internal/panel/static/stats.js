@@ -409,7 +409,7 @@
                             return response.json();
                         })
                         .then(function(data) {
-                            document.getElementById('stats-status').textContent = 'Обновлено в ' + new Date().toLocaleTimeString('ru-RU');
+                            document.getElementById('stats-status').textContent = data.reputationError ? 'Не удалось сохранить список IP. Проверьте свободное место и права записи.' : 'Обновлено в ' + new Date().toLocaleTimeString('ru-RU');
                             if (data.memory && data.memory.labels.length > 0) {
                                 memoryChart.data.labels = data.memory.labels;
                                 memoryChart.data.datasets[0].data = data.memory.percents;
@@ -640,4 +640,3 @@
                 setInterval(fetchData, 3000);
                 fetchData();
             })();
-        

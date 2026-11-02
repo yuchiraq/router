@@ -22,6 +22,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--collect-disks" {
+		if err := stats.WriteDiskSnapshot(os.Args[2]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	// Initialize storage
 	fileStorage := storage.NewStorage("rules.json")
 	store := storage.NewRuleStore(fileStorage)
@@ -39,6 +45,10 @@ func main() {
 
 	// Suspicious IP reputation storage
 	ipReputation := storage.NewIPReputationStore("ip_reputation.json")
+	if err := ipReputation.LastError(); err != "" {
+		clog.Fatalf("IP reputation unavailable: %s. Restore the reputation file before starting Router.", err)
+	}
+	go ipReputation.StartMaintenance(context.Background())
 	backupStore := storage.NewBackupStore("backup_config.json")
 	notifyStore := storage.NewNotificationStore("notifications.json")
 	gptStore := storage.NewGPTStore("gpt.json")
