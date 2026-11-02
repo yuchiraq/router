@@ -13,6 +13,43 @@ func TestArchiveNameIsPortable(t *testing.T) {
 	}
 }
 
+func TestBackupRejectsRecursiveDestination(t *testing.T) {
+	dir := t.TempDir()
+	s := NewBackupStore(filepath.Join(t.TempDir(), "b.json"))
+	j := s.UpsertJob(BackupJob{Name: "bad", Sources: []string{dir}, DestinationDir: filepath.Join(dir, "archives")})
+	if s.RunJobNow(j.ID) == nil {
+		t.Fatal("recursive archive accepted")
+	}
+	_, entries, _ := s.Get()
+	if len(entries) != 0 {
+		t.Fatal("invalid archive registered")
+	}
+}
+
+func TestBackupSkipsExternalSymlink(t *testing.T) {
+	src := t.TempDir()
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	os.WriteFile(secret, []byte("secret"), 0600)
+	if err := os.Symlink(secret, filepath.Join(src, "escape.txt")); err != nil {
+		t.Skip("symlinks unavailable", err)
+	}
+	os.WriteFile(filepath.Join(src, "safe.txt"), []byte("safe"), 0600)
+	s := NewBackupStore(filepath.Join(t.TempDir(), "b.json"))
+	j := s.UpsertJob(BackupJob{Name: "safe", Sources: []string{src}, DestinationDir: t.TempDir()})
+	if err := s.RunJobNow(j.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, entries, _ := s.Get()
+	z, err := zip.OpenReader(entries[0].Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer z.Close()
+	if len(z.File) != 1 || filepath.Base(z.File[0].Name) != "safe.txt" {
+		t.Fatal("followed external symlink")
+	}
+}
+
 func TestBackupStoreRunNowAndRetentionPerJob(t *testing.T) {
 	dir := t.TempDir()
 	srcDir := filepath.Join(dir, "src")

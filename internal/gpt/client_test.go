@@ -9,6 +9,9 @@ import (
 
 func TestIsAllowedChat(t *testing.T) {
 	store := storage.NewGPTStore(filepath.Join(t.TempDir(), "gpt.json"))
+	if NewClient(store).IsAllowedChat(10) {
+		t.Fatal("empty allowlist must deny access")
+	}
 	store.Update(storage.GPTConfig{Enabled: true, OnlyChatIDs: []int64{10, 20}})
 	client := NewClient(store)
 	if !client.IsAllowedChat(10) {

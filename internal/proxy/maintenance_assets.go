@@ -5,8 +5,7 @@ import "net/http"
 // Explicit allowlist: no directory browsing or arbitrary panel files on public sites.
 var maintenanceAssets = map[string]string{
 	"maintenance.css": "maintenance.css", "maintenance.js": "maintenance.js",
-	"game_manager.js": "vendor/2048/game_manager.js", "grid.js": "vendor/2048/grid.js", "tile.js": "vendor/2048/tile.js",
-	"game.js": "maintenance-game.js", "license.txt": "vendor/2048/LICENSE.txt",
+	"visual.js": "maintenance-visual.js", "pause.svg": "icons/pause.svg",
 	"network.svg": "icons/network.svg", "rotate-ccw.svg": "icons/rotate-ccw.svg",
 	"qoncept.svg":  "icons/qoncept.svg",
 	"arrow-up.svg": "icons/arrow-up.svg", "arrow-down.svg": "icons/arrow-down.svg",

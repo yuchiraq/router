@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"html/template"
 	"net/http"
@@ -103,7 +104,14 @@ func NewHandler(store *storage.RuleStore, adminStore *storage.AdminStore, stats 
 // basicAuth is a middleware for session-based authentication
 func (h *Handler) basicAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if h.adminStore == nil || h.isAuthenticated(r) {
+		if h.adminStore == nil {
+			http.Error(w, "Учётная запись администратора недоступна", http.StatusServiceUnavailable)
+			return
+		}
+		if h.isAuthenticated(r) {
+			if !protectMutation(w, r) {
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -150,6 +158,10 @@ func writeJSON(w http.ResponseWriter, payload interface{}) {
 
 // Index serves the main page with the list of rules
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
 	h.basicAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			maintenance := r.FormValue("maintenance") == "on"
@@ -567,7 +579,7 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := h.notifyStore.Get()
-	if cfg.WebhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != cfg.WebhookSecret {
+	if cfg.WebhookSecret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Telegram-Bot-Api-Secret-Token")), []byte(cfg.WebhookSecret)) != 1 {
 		clog.Warnf("Telegram webhook: invalid secret token")
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -589,6 +601,7 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 			} `json:"chat"`
 		} `json:"message"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		clog.Errorf("Telegram webhook: failed to decode update: %v", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -613,6 +626,17 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		chatID := update.Message.Chat.ID
+		allowed := false
+		for _, id := range cfg.ChatIDs {
+			if id == chatID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		text := strings.TrimSpace(update.Message.Text)
 		clog.Infof("Telegram webhook: incoming message chat_id=%d text_len=%d", chatID, len(text))
 		if text == "/start" || text == "/help" {
@@ -864,7 +888,10 @@ func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
 			MaxLogLines:  maxLogLines,
 			OnlyChatIDs:  onlyChatIDs,
 		}
-		h.gptStore.Update(cfg)
+		if err := h.gptStore.Update(cfg); err != nil {
+			http.Error(w, "Не удалось сохранить настройки GPT", http.StatusInternalServerError)
+			return
+		}
 
 		writeJSON(w, map[string]interface{}{"config": h.gptStore.Get()})
 	}).ServeHTTP(w, r)
@@ -872,6 +899,7 @@ func (h *Handler) SaveSettingsConfig(w http.ResponseWriter, r *http.Request) {
 
 // Login serves and handles login form.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == http.MethodGet {
 		if h.isAuthenticated(r) {
 			http.Redirect(w, r, "/", http.StatusFound)
@@ -888,6 +916,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "admin storage is disabled", http.StatusServiceUnavailable)
 		return
 	}
+	if !protectMutation(w, r) {
+		return
+	}
+	if !h.auth.credentialsMu.TryLock() {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "Повторите вход через секунду", http.StatusTooManyRequests)
+		return
+	}
+	defer h.auth.credentialsMu.Unlock()
 	clientIP := clientIPFromRequest(r)
 	if retryAfter, blocked := h.checkLoginBlocked(clientIP); blocked {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
@@ -903,7 +940,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	h.clearLoginFailures(clientIP)
 	token := h.createSession()
-	http.SetCookie(w, &http.Cookie{Name: "router_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+	if token == "" {
+		http.Error(w, "Не удалось создать сессию", http.StatusServiceUnavailable)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "router_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteStrictMode, MaxAge: 86400})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -918,7 +959,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		if cookie != nil {
 			h.invalidateSession(cookie.Value)
 		}
-		http.SetCookie(w, &http.Cookie{Name: "router_session", Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: "router_session", Value: "", Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		w.WriteHeader(http.StatusNoContent)
 	}).ServeHTTP(w, r)
 }
@@ -951,15 +992,26 @@ func (h *Handler) SaveAccountConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		username := strings.TrimSpace(r.FormValue("username"))
-		password := strings.TrimSpace(r.FormValue("password"))
-		if username == "" || len(password) < 6 {
-			http.Error(w, "username is required and password must be at least 6 chars", http.StatusBadRequest)
+		password := r.FormValue("password")
+		h.auth.credentialsMu.Lock()
+		defer h.auth.credentialsMu.Unlock()
+		if username == "" || len(username) > 128 || len(password) < 12 || len(password) > 72 {
+			http.Error(w, "Пароль должен содержать от 12 до 72 байт, логин не более 128", http.StatusBadRequest)
 			return
 		}
 		if !h.adminStore.Update(username, password) {
 			http.Error(w, "failed to update account", http.StatusInternalServerError)
 			return
 		}
+		h.auth.sessionsMu.Lock()
+		h.auth.sessions = map[string]time.Time{}
+		h.auth.sessionsMu.Unlock()
+		token := h.createSession()
+		if token == "" {
+			http.Error(w, "Войдите повторно", http.StatusServiceUnavailable)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: "router_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteStrictMode, MaxAge: 86400})
 		writeJSON(w, map[string]interface{}{"username": h.adminStore.Username()})
 	}).ServeHTTP(w, r)
 }

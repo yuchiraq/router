@@ -101,7 +101,7 @@ func TestMaintenanceAssetAllowlist(t *testing.T) {
 		}
 	}
 	w := httptest.NewRecorder()
-	ServeMaintenanceAsset(w, httptest.NewRequest("POST", "/_router/maintenance/assets/game.js", nil))
+	ServeMaintenanceAsset(w, httptest.NewRequest("POST", "/_router/maintenance/assets/visual.js", nil))
 	if w.Code != 405 {
 		t.Fatal(w.Code)
 	}

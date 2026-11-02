@@ -1,0 +1,53 @@
+[Unit]
+Description=Router by Qoncept
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Existing data owner: backups include private files created with mode 0600.
+User=yc_162
+Group=yc_162
+WorkingDirectory=/var/lib/router
+ExecStart=/opt/router/current/router
+Environment=PANEL_ADDR=127.0.0.1:8162
+Environment=GOMEMLIMIT=512MiB
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+StateDirectory=router
+StateDirectoryMode=0700
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+PrivateTmp=true
+PrivateDevices=true
+PrivateIPC=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @reboot @swap @module @raw-io @debug
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+TasksMax=256
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+# Backup sources and destinations are allowlisted in router.service.d/storage.conf.
+
+[Install]
+WantedBy=multi-user.target

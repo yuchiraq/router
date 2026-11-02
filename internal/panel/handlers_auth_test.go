@@ -21,7 +21,7 @@ func TestBruteforceBlockAfterFiveFailures(t *testing.T) {
 func TestClientIPFromRequest(t *testing.T) {
 	r := httptest.NewRequest("POST", "/login", nil)
 	r.Header.Set("X-Forwarded-For", "9.8.7.6, 1.1.1.1")
-	if got := clientIPFromRequest(r); got != "9.8.7.6" {
+	if got := clientIPFromRequest(r); got != "192.0.2.1" {
 		t.Fatalf("unexpected client ip: %s", got)
 	}
 }

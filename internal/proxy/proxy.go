@@ -38,10 +38,7 @@ func NewProxy(store *storage.RuleStore, stats *stats.Stats, reputation *storage.
 // ServeHTTP handles the proxying of requests.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	socketIP := remoteAddrIP(r.RemoteAddr)
-	remoteIP := clientIP(r)
-	if workServiceHost(r.Host) {
-		remoteIP = socketIP
-	}
+	remoteIP := socketIP
 	if p.reputation != nil && p.reputation.IsBanned(remoteIP) {
 		clog.Warnf("[blocked-ip] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, remoteIP)
 		if p.notifier != nil {
@@ -110,6 +107,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// All public forwarding metadata is client-controlled until replaced here.
+	for _, header := range []string{"Forwarded", "X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP", "CF-IPCountry", "X-Country-Code", "X-Country"} {
+		r.Header.Del(header)
+	}
 	// Add request to stats with the specific host
 	p.stats.AddRequest(r.Host, stats.CountryFromRequest(r))
 
@@ -121,6 +122,20 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	// Rewrite runs after hop-by-hop headers have been removed, including malicious
+	// Connection nominations. This prevents clients removing our trusted metadata.
+	proxy.Director = nil
+	proxy.Rewrite = func(pr *httputil.ProxyRequest) {
+		pr.SetURL(targetURL)
+		pr.Out.Host = targetURL.Host
+		if panelRoute || workServiceHost(pr.In.Host) {
+			pr.Out.Host = pr.In.Host
+		}
+		pr.SetXForwarded()
+		pr.Out.Header.Set("X-Real-IP", socketIP)
+		pr.Out.Header.Del("CF-Connecting-IP")
+		pr.Out.Header.Del("Forwarded")
+	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		if r.Context().Err() != nil {
 			return
@@ -130,17 +145,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.serveMaintenance(w, r, true)
 	}
 
-	// Update the request headers
-	incomingHost := r.Host
-	r.URL.Host = targetURL.Host
-	r.URL.Scheme = targetURL.Scheme
-	r.Header.Set("X-Real-IP", remoteIP)
-	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
-	r.Header.Set("X-Forwarded-For", appendForwardedFor(r.Header.Get("X-Forwarded-For"), socketIP))
-	r.Host = targetURL.Host
-	setWorkServiceHeaders(r, incomingHost, socketIP)
-
-	clog.Infof("[proxy-forward] %s %s src=%s remote=%s xff=%q host=%s -> %s", r.Method, r.URL.Path, remoteIP, r.RemoteAddr, r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Forwarded-Host"), targetURL.Host)
+	clog.Infof("[proxy-forward] %s %s host=%s remote=%s", r.Method, r.URL.Path, r.Host, socketIP)
 
 	proxy.ServeHTTP(w, r)
 }
@@ -172,6 +177,8 @@ func (p *Proxy) serveMaintenance(w http.ResponseWriter, r *http.Request, automat
 	w.Header().Set("Retry-After", "15")
 	w.Header().Set("X-Router-Maintenance", "1")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("X-Frame-Options", "DENY")
 	htmlResponse := (r.Method == http.MethodGet || r.Method == http.MethodHead) && (strings.Contains(r.Header.Get("Accept"), "text/html") || r.Header.Get("Accept") == "")
 	if htmlResponse {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -192,37 +199,7 @@ func (p *Proxy) serveMaintenance(w http.ResponseWriter, r *http.Request, automat
 }
 
 func clientIP(r *http.Request) string {
-	socketIP := remoteAddrIP(r.RemoteAddr)
-
-	if ip := firstValidIP(r.Header.Get("CF-Connecting-IP")); ip != "" {
-		if isPublicIP(ip) || !isPublicIP(socketIP) {
-			return ip
-		}
-	}
-
-	if ip := firstPublicIPFromXFF(r.Header.Get("X-Forwarded-For")); ip != "" {
-		return ip
-	}
-
-	if ip := firstValidIP(r.Header.Get("X-Real-IP")); ip != "" {
-		if isPublicIP(ip) || !isPublicIP(socketIP) {
-			return ip
-		}
-	}
-
-	if isPublicIP(socketIP) {
-		return socketIP
-	}
-
-	if ip := firstValidIPFromXFF(r.Header.Get("X-Forwarded-For")); ip != "" {
-		return ip
-	}
-
-	if ip := firstValidIP(r.Header.Get("X-Real-IP")); ip != "" {
-		return ip
-	}
-
-	return socketIP
+	return remoteAddrIP(r.RemoteAddr)
 }
 
 func remoteAddrIP(remoteAddr string) string {

@@ -17,7 +17,7 @@
             document.body.classList.toggle('is-ready',available);link.hidden=!available;button.hidden=available;
             document.getElementById('service-label').textContent=available?'Сайт снова доступен':'Сайт пока недоступен';
             document.getElementById('page-title').textContent=available?'Можно возвращаться.':'Небольшая пауза.';
-            document.getElementById('service-description').textContent=available?'Соединение восстановлено. Игра сохранится.':'Ожидаем восстановления работы сайта.';
+            document.getElementById('service-description').textContent=available?'Соединение восстановлено. Можно продолжить работу.':'Ожидаем восстановления работы сайта.';
             result.textContent=available?'Откройте сайт, когда будете готовы.':'Проверено в '+new Date().toLocaleTimeString('ru-RU');
         }catch(_){result.textContent='Не удалось проверить соединение. Повторим автоматически.';}
         finally{pending=false;button.disabled=false;}

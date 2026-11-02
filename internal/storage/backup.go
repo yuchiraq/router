@@ -39,6 +39,7 @@ type backupState struct {
 }
 
 type BackupStore struct {
+	runMu     sync.Mutex
 	mu        sync.RWMutex
 	path      string
 	jobs      []BackupJob
@@ -201,6 +202,10 @@ func (s *BackupStore) runDueJobs() error {
 }
 
 func (s *BackupStore) RunJobNow(jobID string) error {
+	if !s.runMu.TryLock() {
+		return fmt.Errorf("Копирование уже выполняется")
+	}
+	defer s.runMu.Unlock()
 	s.mu.Lock()
 	var job *BackupJob
 	for i := range s.jobs {
@@ -222,33 +227,61 @@ func (s *BackupStore) RunJobNow(jobID string) error {
 	if len(cfg.Sources) == 0 {
 		return s.setError(fmt.Errorf("at least one source is required"))
 	}
-	if err := os.MkdirAll(cfg.DestinationDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.DestinationDir, 0700); err != nil {
 		return s.setError(err)
+	}
+	destination, err := filepath.EvalSymlinks(cfg.DestinationDir)
+	if err != nil {
+		return s.setError(err)
+	}
+	destination, err = filepath.Abs(destination)
+	if err != nil {
+		return s.setError(err)
+	}
+	for _, source := range cfg.Sources {
+		resolved, err := filepath.EvalSymlinks(source)
+		if err != nil {
+			return s.setError(err)
+		}
+		resolved, err = filepath.Abs(resolved)
+		if err != nil {
+			return s.setError(err)
+		}
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return s.setError(err)
+		}
+		if info.IsDir() {
+			rel, err := filepath.Rel(resolved, destination)
+			if err == nil && (rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+				return s.setError(fmt.Errorf("Папка архивов не должна находиться внутри копируемой папки"))
+			}
+		}
 	}
 
 	archivePath := filepath.Join(cfg.DestinationDir, fmt.Sprintf("%s-%s.zip", sanitizeName(cfg.Name), time.Now().Format("20060102-150405.000000000")))
-	file, err := os.Create(archivePath)
+	file, err := os.OpenFile(archivePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return s.setError(err)
 	}
 	zw := zip.NewWriter(file)
 
-	added := 0
 	for _, src := range cfg.Sources {
-		if err := addSourceToZip(zw, src); err == nil {
-			added++
+		if err := addSourceToZip(zw, src); err != nil {
+			zw.Close()
+			file.Close()
+			os.Remove(archivePath)
+			return s.setError(err)
 		}
 	}
 	if err := zw.Close(); err != nil {
 		_ = file.Close()
+		_ = os.Remove(archivePath)
 		return s.setError(err)
 	}
 	if err := file.Close(); err != nil {
-		return s.setError(err)
-	}
-	if added == 0 {
 		_ = os.Remove(archivePath)
-		return s.setError(fmt.Errorf("no valid sources found"))
+		return s.setError(err)
 	}
 
 	st, err := os.Stat(archivePath)
@@ -291,14 +324,22 @@ func sanitizeName(name string) string {
 }
 
 func addSourceToZip(zw *zip.Writer, source string) error {
-	info, err := os.Stat(source)
+	info, err := os.Lstat(source)
 	if err != nil {
 		return err
 	}
 	baseName := filepath.Base(source)
 	if !info.IsDir() {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("Источник должен быть обычным файлом или папкой: %s", source)
+		}
 		return addFileToZip(zw, source, baseName)
 	}
+	root, err := os.OpenRoot(source)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 
 	return filepath.WalkDir(source, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -307,21 +348,56 @@ func addSourceToZip(zw *zip.Writer, source string) error {
 		if d.IsDir() {
 			return nil
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("Специальный файл нельзя архивировать: %s", path)
+		}
 		rel, err := filepath.Rel(source, path)
 		if err != nil {
 			return err
 		}
 		name := filepath.ToSlash(filepath.Join(baseName, rel))
-		return addFileToZip(zw, path, name)
+		f, err := root.Open(rel)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		st, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if !st.Mode().IsRegular() {
+			return fmt.Errorf("Источник изменился: %s", path)
+		}
+		w, err := zw.Create(name)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, f)
+		return err
 	})
 }
 
 func addFileToZip(zw *zip.Writer, diskPath, archivePath string) error {
-	f, err := os.Open(diskPath)
+	root, err := os.OpenRoot(filepath.Dir(diskPath))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	f, err := root.Open(filepath.Base(diskPath))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !st.Mode().IsRegular() {
+		return fmt.Errorf("Источник изменился: %s", diskPath)
+	}
 
 	w, err := zw.Create(archivePath)
 	if err != nil {

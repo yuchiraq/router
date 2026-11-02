@@ -77,18 +77,16 @@ func main() {
 	adminUser := os.Getenv("ADMIN_USER")
 	adminPass := os.Getenv("ADMIN_PASS")
 	if adminUser == "" {
-		adminUser = "testuser"
-		clog.Warnf("ADMIN_USER is not set, using default admin user")
-	}
-	if adminPass == "" {
-		adminPass = "testpass"
-		clog.Warnf("ADMIN_PASS is not set, using default admin password")
+		adminUser = "admin"
 	}
 	panelAddr := strings.TrimSpace(os.Getenv("PANEL_ADDR"))
 	if panelAddr == "" {
 		panelAddr = "127.0.0.1:8162"
 	}
 	adminStore := storage.NewAdminStore("admin.json", adminUser, adminPass)
+	if !adminStore.Ready() {
+		clog.Fatalf("Admin credentials unavailable. For first setup set ADMIN_USER and a strong ADMIN_PASS (12-72 bytes); repair an existing admin.json instead of resetting it.")
+	}
 	store.SetPanelAddress(panelAddr)
 	store.SetServiceDownListener(func(event storage.ServiceOutage) {
 		go notifier.NotifyServiceUnavailable(event)
@@ -102,8 +100,7 @@ func main() {
 		panelHandler.SetDiskMonitor(diskMonitor)
 
 		// Serve static files
-		staticFS := http.FileServer(http.Dir("internal/panel/static"))
-		panelMux.Handle("/static/", http.StripPrefix("/static/", staticFS))
+		panelMux.Handle("/static/", panel.StaticAssets("internal/panel/static"))
 
 		panelMux.HandleFunc("/", panelHandler.Index)
 		panelMux.HandleFunc("/login", panelHandler.Login)
@@ -141,7 +138,8 @@ func main() {
 		})
 		panelMux.HandleFunc("/remove", panelHandler.RemoveRule)
 		clog.Infof("Starting admin panel on %s", panelAddr)
-		if err := http.ListenAndServe(panelAddr, panelMux); err != nil {
+		panelServer := &http.Server{Addr: panelAddr, Handler: panel.SecurityHeaders(panelMux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+		if err := panelServer.ListenAndServe(); err != nil {
 			clog.Fatalf("Failed to start admin panel: %v", err)
 		}
 	}()
@@ -164,17 +162,22 @@ func main() {
 
 	// HTTPS server
 	server := &http.Server{
-		Addr:    ":443",
-		Handler: proxyMux,
+		Addr:              ":443",
+		Handler:           proxyMux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       90 * time.Second,
+		MaxHeaderBytes:    64 << 10,
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
 		},
 	}
 
 	// HTTP server (for ACME challenge and redirecting to HTTPS)
 	go func() {
 		clog.Infof("Starting HTTP server on :80")
-		if err := http.ListenAndServe(":80", certManager.HTTPHandler(nil)); err != nil {
+		httpServer := &http.Server{Addr: ":80", Handler: certManager.HTTPHandler(nil), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+		if err := httpServer.ListenAndServe(); err != nil {
 			clog.Fatalf("HTTP server error: %v", err)
 		}
 	}()

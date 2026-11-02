@@ -14,7 +14,7 @@ func TestMaintenanceHTTP(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewRuleStore(storage.NewStorage(filepath.Join(dir, "rules.json")))
 	store.Add("example.test", "localhost:8099")
-	h := &Handler{store: store, auth: newAuthState(), adminStore: storage.NewAdminStore(filepath.Join(dir, "admin.json"), "admin", "password")}
+	h := &Handler{store: store, auth: newAuthState(), adminStore: storage.NewAdminStore(filepath.Join(dir, "admin.json"), "admin", "test-password-123")}
 	token := h.createSession()
 	call := func(path string, enabled, authenticated bool) *httptest.ResponseRecorder {
 		data := url.Values{"host": {"example.test"}}
@@ -23,6 +23,7 @@ func TestMaintenanceHTTP(t *testing.T) {
 		}
 		r := httptest.NewRequest("POST", path, strings.NewReader(data.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("X-Router-Request", "1")
 		r.Header.Set("Accept", "application/json")
 		if authenticated {
 			r.AddCookie(&http.Cookie{Name: "router_session", Value: token})

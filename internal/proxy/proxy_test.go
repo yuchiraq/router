@@ -13,16 +13,16 @@ func TestClientIPSelection(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "cf connecting ip has highest priority when public",
+			name:     "cf connecting ip is untrusted",
 			headers:  map[string]string{"CF-Connecting-IP": "198.51.100.7", "X-Real-IP": "198.51.100.8"},
 			remote:   "127.0.0.1:12345",
-			expected: "198.51.100.7",
+			expected: "127.0.0.1",
 		},
 		{
-			name:     "public xff beats localhost x-real",
+			name:     "public xff cannot override socket",
 			headers:  map[string]string{"X-Real-IP": "127.0.0.1", "X-Forwarded-For": "198.51.100.11, 127.0.0.1"},
 			remote:   "185.177.72.13:23088",
-			expected: "198.51.100.11",
+			expected: "185.177.72.13",
 		},
 		{
 			name:     "remote public beats localhost headers",

@@ -27,7 +27,7 @@ func NewClient(store *storage.GPTStore) *Client {
 func (c *Client) IsAllowedChat(chatID int64) bool {
 	cfg := c.store.Get()
 	if len(cfg.OnlyChatIDs) == 0 {
-		return true
+		return false
 	}
 	for _, id := range cfg.OnlyChatIDs {
 		if id == chatID {
@@ -84,7 +84,7 @@ func (c *Client) Reply(chatID int64, userText string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode >= 300 {
 		clog.Errorf("GPT: openai non-2xx chat_id=%d status=%s body=%s", chatID, resp.Status, strings.TrimSpace(string(body)))
 		return "", fmt.Errorf("openai error: %s %s", resp.Status, strings.TrimSpace(string(body)))

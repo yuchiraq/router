@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -47,12 +48,28 @@ func (s *GPTStore) load() {
 	s.config = cfg
 }
 
-func (s *GPTStore) saveLocked() {
-	data, err := json.MarshalIndent(s.config, "", "  ")
+func (s *GPTStore) saveConfig(cfg GPTConfig) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-	_ = os.WriteFile(s.path, data, 0644)
+	f, err := os.CreateTemp(filepath.Dir(s.path), ".gpt-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), s.path)
 }
 
 func (s *GPTStore) Get() GPTConfig {
@@ -63,7 +80,7 @@ func (s *GPTStore) Get() GPTConfig {
 	return cfg
 }
 
-func (s *GPTStore) Update(cfg GPTConfig) {
+func (s *GPTStore) Update(cfg GPTConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if cfg.Model == "" {
@@ -72,6 +89,9 @@ func (s *GPTStore) Update(cfg GPTConfig) {
 	if cfg.MaxLogLines <= 0 {
 		cfg.MaxLogLines = 20
 	}
+	if err := s.saveConfig(cfg); err != nil {
+		return err
+	}
 	s.config = cfg
-	s.saveLocked()
+	return nil
 }

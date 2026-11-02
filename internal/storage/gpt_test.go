@@ -1,9 +1,30 @@
 package storage
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestGPTStoreFailedSaveKeepsPreviousConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gpt.json")
+	s := NewGPTStore(path)
+	if err := s.Update(GPTConfig{APIKey: "original"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Update(GPTConfig{APIKey: "changed"}); err == nil {
+		t.Fatal("save must fail")
+	}
+	if s.Get().APIKey != "original" {
+		t.Fatal("failed write changed live configuration")
+	}
+}
 
 func TestGPTStoreDefaultsAndPersist(t *testing.T) {
 	dir := t.TempDir()

@@ -15,11 +15,12 @@ func TestNotificationDiskSettings(t *testing.T) {
 	dir := t.TempDir()
 	s := storage.NewNotificationStore(filepath.Join(dir, "notifications.json"))
 	s.RememberKnownChatID(123)
-	h := &Handler{notifyStore: s, auth: newAuthState(), adminStore: storage.NewAdminStore(filepath.Join(dir, "admin.json"), "admin", "password")}
+	h := &Handler{notifyStore: s, auth: newAuthState(), adminStore: storage.NewAdminStore(filepath.Join(dir, "admin.json"), "admin", "test-password-123")}
 	token := h.createSession()
 	post := func(values url.Values, authenticated bool) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", "http://localhost/notifications/config", strings.NewReader(values.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("X-Router-Request", "1")
 		r.Header.Set("Accept", "application/json")
 		if authenticated {
 			r.AddCookie(&http.Cookie{Name: "router_session", Value: token})

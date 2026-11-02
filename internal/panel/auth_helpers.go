@@ -14,13 +14,15 @@ import (
 type loginAttempt struct {
 	Count       int
 	BlockedTill time.Time
+	UpdatedAt   time.Time
 }
 
 type authState struct {
-	sessions     map[string]time.Time
-	sessionsMu   sync.RWMutex
-	loginFails   map[string]loginAttempt
-	loginFailsMu sync.Mutex
+	sessions      map[string]time.Time
+	sessionsMu    sync.RWMutex
+	loginFails    map[string]loginAttempt
+	loginFailsMu  sync.Mutex
+	credentialsMu sync.Mutex
 }
 
 func newAuthState() *authState {
@@ -46,9 +48,20 @@ func (h *Handler) isAuthenticated(r *http.Request) bool {
 
 func (h *Handler) createSession() string {
 	b := make([]byte, 32)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
 	token := hex.EncodeToString(b)
 	h.auth.sessionsMu.Lock()
+	for key, expiry := range h.auth.sessions {
+		if time.Now().After(expiry) {
+			delete(h.auth.sessions, key)
+		}
+	}
+	if len(h.auth.sessions) >= 128 {
+		h.auth.sessionsMu.Unlock()
+		return ""
+	}
 	h.auth.sessions[token] = time.Now().Add(24 * time.Hour)
 	h.auth.sessionsMu.Unlock()
 	return token
@@ -65,7 +78,7 @@ func (h *Handler) invalidateSession(token string) {
 
 func clientIPFromRequest(r *http.Request) string {
 	xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-	if xff != "" {
+	if localProxy(r) && xff != "" {
 		parts := strings.Split(xff, ",")
 		if len(parts) > 0 {
 			ip := strings.TrimSpace(parts[0])
@@ -91,6 +104,16 @@ func (h *Handler) checkLoginBlocked(ip string) (time.Duration, bool) {
 	h.auth.loginFailsMu.Lock()
 	defer h.auth.loginFailsMu.Unlock()
 	entry, ok := h.auth.loginFails[ip]
+	if !ok && len(h.auth.loginFails) >= 4096 {
+		for key, value := range h.auth.loginFails {
+			if time.Since(value.UpdatedAt) > time.Hour && time.Now().After(value.BlockedTill) {
+				delete(h.auth.loginFails, key)
+			}
+		}
+		if len(h.auth.loginFails) >= 4096 {
+			return time.Minute, true
+		}
+	}
 	if !ok || entry.BlockedTill.IsZero() {
 		return 0, false
 	}
@@ -111,6 +134,7 @@ func (h *Handler) registerLoginFailure(ip string) {
 		entry = loginAttempt{}
 	}
 	entry.Count++
+	entry.UpdatedAt = now
 	if entry.Count >= 5 {
 		entry.BlockedTill = now.Add(1 * time.Hour)
 		entry.Count = 0
