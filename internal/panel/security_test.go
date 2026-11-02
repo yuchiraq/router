@@ -1,17 +1,50 @@
 package panel
 
 import (
+	"github.com/gorilla/websocket"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"router/internal/logstream"
 	"router/internal/notify"
 	"router/internal/storage"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestWebsocketOriginAndRevokedSession(t *testing.T) {
+	r := httptest.NewRequest("GET", "https://panel.test/ws/logs", nil)
+	for origin, allowed := range map[string]bool{"https://panel.test": true, "http://panel.test": false, "https://other.test": false, "null": false} {
+		r.Header.Set("Origin", origin)
+		if upgrader.CheckOrigin(r) != allowed {
+			t.Fatalf("unexpected origin decision: %s", origin)
+		}
+	}
+	h := secureTestHandler(t)
+	h.broadcaster = logstream.New()
+	s := httptest.NewServer(http.HandlerFunc(h.Logs))
+	defer s.Close()
+	token := h.createSession()
+	headers := http.Header{"Cookie": []string{"router_session=" + token}, "Origin": []string{s.URL}}
+	c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(s.URL, "http")+"/ws/logs", headers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	h.broadcaster.Write([]byte("before revocation"))
+	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err = c.ReadMessage(); err != nil {
+		t.Fatal(err)
+	}
+	h.invalidateSession(token)
+	h.broadcaster.Write([]byte("must not be sent"))
+	if _, _, err = c.ReadMessage(); err == nil {
+		t.Fatal("revoked session received logs")
+	}
+}
 
 func secureTestHandler(t *testing.T) *Handler {
 	t.Helper()

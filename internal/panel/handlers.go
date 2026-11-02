@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
-	"net/url"
 	"router/internal/clog"
 	"strconv"
 	"strings"
@@ -27,17 +26,7 @@ var upgrader = websocket.Upgrader{
 			return true // non-browser clients
 		}
 
-		originURL, err := url.Parse(origin)
-		if err != nil {
-			return false
-		}
-
-		host := r.Host
-		if host == "" {
-			return false
-		}
-
-		return strings.EqualFold(originURL.Host, host)
+		return sameOrigin(r, origin)
 	},
 }
 
@@ -376,14 +365,44 @@ func (h *Handler) Logs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer conn.Close()
+		conn.SetReadLimit(1024)
+		_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+		conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(45 * time.Second)) })
+		disconnected := make(chan struct{})
+		go func() {
+			defer close(disconnected)
+			for {
+				if _, _, err := conn.ReadMessage(); err != nil {
+					return
+				}
+			}
+		}()
 
 		ch := make(chan []byte, 256)
 		h.broadcaster.AddListener(ch)
 		defer h.broadcaster.RemoveListener(ch)
 
-		for msg := range ch {
-			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				break
+		heartbeat := time.NewTicker(15 * time.Second)
+		defer heartbeat.Stop()
+		for {
+			select {
+			case <-disconnected:
+				return
+			case <-heartbeat.C:
+				if !h.isAuthenticated(r) {
+					return
+				}
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					return
+				}
+			case msg := <-ch:
+				if !h.isAuthenticated(r) {
+					return
+				}
+				_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+					return
+				}
 			}
 		}
 	}).ServeHTTP(w, r)
